@@ -4,7 +4,13 @@ import React, { useState } from "react";
 import { useDashboard } from "../context/DashboardContext";
 
 export default function DigitalKhataPage() {
-  const { customersWithBalances, getCustomerLedger, openModal } = useDashboard();
+  const {
+    customersWithBalances,
+    getCustomerLedger,
+    getCustomerBill,
+    openModal,
+  } = useDashboard();
+
   const [selectedCustomerId, setSelectedCustomerId] = useState(
     customersWithBalances[0]?.id || ""
   );
@@ -15,6 +21,7 @@ export default function DigitalKhataPage() {
     customersWithBalances[0];
 
   const fullLedger = activeCustomer ? getCustomerLedger(activeCustomer.id) : [];
+  const customerBill = activeCustomer ? getCustomerBill(activeCustomer.id) : undefined;
 
   // Filter ledger transactions by search query
   const filteredLedger = fullLedger.filter((item) => {
@@ -51,7 +58,7 @@ export default function DigitalKhataPage() {
 
         {/* Customer Balance Callout */}
         {activeCustomer && (
-          <div className="flex items-center gap-4 bg-[#FCF8F2] border border-[#F0E4D4] p-3.5 rounded-xl">
+          <div className="flex flex-wrap items-center gap-4 bg-[#FCF8F2] border border-[#F0E4D4] p-3.5 rounded-xl">
             <div>
               <span className="text-[10px] font-bold text-[#8DA6BC] uppercase tracking-wider block">
                 Current Outstanding Udhaar
@@ -64,7 +71,16 @@ export default function DigitalKhataPage() {
                 Rs. {activeCustomer.currentBalance.toLocaleString()}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {customerBill && (
+                <button
+                  type="button"
+                  onClick={() => openModal("item-adjust", activeCustomer.id)}
+                  className="px-3 py-2 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#8C4B00] border border-[#EADBCA] text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  ⚖️ Adjust Item
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => openModal("credit", activeCustomer.id)}
@@ -78,7 +94,7 @@ export default function DigitalKhataPage() {
                 onClick={() => openModal("payment", activeCustomer.id)}
                 className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
               >
-                Receive Payment
+                ↓ Receive Payment
               </button>
             </div>
           </div>
@@ -87,7 +103,7 @@ export default function DigitalKhataPage() {
 
       {/* Selected Customer Details Bar */}
       {activeCustomer && (
-        <div className="bg-white rounded-2xl p-5 border border-[#EADBCA] shadow-xs">
+        <div className="bg-white rounded-2xl p-5 border border-[#EADBCA] shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#F0E4D4]">
             <div className="flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-bold text-sm">
@@ -126,8 +142,83 @@ export default function DigitalKhataPage() {
             </div>
           </div>
 
+          {/* Original Bill Item Records (Source of Truth) */}
+          {customerBill && (
+            <div className="p-4 bg-[#FAF3E8] rounded-2xl border border-[#EADBCA] space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-kf-orange" />
+                    <h4 className="text-xs font-extrabold text-kf-navy uppercase tracking-wider">
+                      Original Bill #{customerBill.billNo} — Verified Item Records
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-[#556B82] mt-0.5">
+                    Original bill records are protected. Item adjustments and payment allocations reconcile line-by-line.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openModal("item-adjust", activeCustomer.id)}
+                  className="self-start sm:self-auto px-3 py-1.5 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-lg border border-[#FFD9B3] transition-colors cursor-pointer"
+                >
+                  ⚖️ Adjust Item against Bill
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {customerBill.items.map((it) => (
+                  <div
+                    key={it.id}
+                    className="p-3 bg-white rounded-xl border border-[#F0E4D4] shadow-2xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-kf-navy text-xs">{it.name}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          it.remainingBalance === 0
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
+                        }`}
+                      >
+                        {it.remainingBalance === 0 ? "Paid" : "Unpaid"}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] text-[#556B82]">
+                      Original:{" "}
+                      <strong>
+                        {it.quantity} {it.unit}
+                      </strong>{" "}
+                      @ Rs. {it.unitPrice.toLocaleString()}/{it.unit}
+                    </div>
+
+                    <div className="pt-1 border-t border-[#F0E4D4] flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] text-[#8DA6BC] block">Total</span>
+                        <span className="font-bold text-kf-navy">
+                          Rs. {it.lineTotal.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-[#8DA6BC] block">Remaining Due</span>
+                        <span
+                          className={`font-extrabold ${
+                            it.remainingBalance === 0 ? "text-green-600" : "text-kf-orange"
+                          }`}
+                        >
+                          Rs. {it.remainingBalance.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Search within ledger */}
-          <div className="pt-4 flex items-center justify-between gap-3">
+          <div className="pt-2 flex items-center justify-between gap-3">
             <div className="relative max-w-xs flex-1">
               <input
                 type="text"
@@ -148,7 +239,7 @@ export default function DigitalKhataPage() {
           </div>
 
           {/* Ledger Table */}
-          <div className="mt-4 overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#EADBCA] bg-[#FAF3E8] text-[#556B82] uppercase text-[10px] font-bold tracking-wider">
@@ -161,44 +252,51 @@ export default function DigitalKhataPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0E4D4]">
-                {/* Initial Opening Balance Row */}
-                <tr className="bg-[#FFFDF9] font-medium text-[#556B82]">
-                  <td className="py-3 px-3">{activeCustomer.createdAt}</td>
-                  <td className="py-3 px-3 font-semibold text-kf-navy">
-                    Initial Opening Balance
+                {/* Initial opening balance row */}
+                <tr className="bg-[#FAF6F0] font-semibold text-[#556B82]">
+                  <td className="py-3 px-3 whitespace-nowrap">{activeCustomer.createdAt}</td>
+                  <td className="py-3 px-3">
+                    <span className="italic">Opening Balance Account Initialized</span>
                   </td>
                   <td className="py-3 px-3 text-[#8DA6BC]">—</td>
-                  <td className="py-3 px-3 text-right text-kf-orange font-bold">
+                  <td className="py-3 px-3 text-right font-bold text-kf-navy tabular-nums">
                     {activeCustomer.openingBalance > 0
                       ? `Rs. ${activeCustomer.openingBalance.toLocaleString()}`
-                      : "—"}
+                      : "Rs. 0"}
                   </td>
                   <td className="py-3 px-3 text-right text-[#8DA6BC]">—</td>
-                  <td className="py-3 px-3 text-right font-extrabold text-kf-navy">
+                  <td className="py-3 px-3 text-right font-extrabold text-kf-navy tabular-nums">
                     Rs. {activeCustomer.openingBalance.toLocaleString()}
                   </td>
                 </tr>
 
                 {filteredLedger.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-[#556B82]">
-                      No transactions recorded for this customer yet.
+                    <td colSpan={6} className="py-8 text-center text-xs text-[#556B82]">
+                      No transactions recorded yet. Use buttons above to give credit or record payment.
                     </td>
                   </tr>
                 ) : (
                   filteredLedger.map((tx) => (
                     <tr key={tx.id} className="hover:bg-[#FCF8F2] transition-colors">
-                      <td className="py-3 px-3 font-medium text-kf-navy">{tx.date}</td>
-                      <td className="py-3 px-3 font-semibold text-kf-navy">
-                        {tx.description}
+                      <td className="py-3 px-3 font-semibold text-kf-navy whitespace-nowrap">
+                        {tx.date}
                       </td>
-                      <td className="py-3 px-3 text-[#8DA6BC]">
-                        {tx.receiptNo || (tx.paymentMethod ? `via ${tx.paymentMethod}` : "—")}
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-kf-navy">{tx.description}</div>
+                        {tx.paymentMethod && (
+                          <span className="text-[10px] text-[#556B82] font-normal">
+                            Mode: {tx.paymentMethod}
+                          </span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-kf-orange">
+                      <td className="py-3 px-3 font-mono text-[11px] text-[#8DA6BC]">
+                        {tx.receiptNo || "—"}
+                      </td>
+                      <td className="py-3 px-3 text-right font-extrabold text-kf-orange tabular-nums">
                         {tx.type === "credit" ? `+Rs. ${tx.amount.toLocaleString()}` : "—"}
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-green-600">
+                      <td className="py-3 px-3 text-right font-extrabold text-green-600 tabular-nums">
                         {tx.type === "payment" ? `-Rs. ${tx.amount.toLocaleString()}` : "—"}
                       </td>
                       <td className="py-3 px-3 text-right font-extrabold text-kf-navy tabular-nums">

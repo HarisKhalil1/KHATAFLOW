@@ -9,7 +9,7 @@ interface CustomerDetailsModalProps {
 }
 
 export default function CustomerDetailsModal({ customerId, onClose }: CustomerDetailsModalProps) {
-  const { getCustomerWithBalance, getCustomerLedger, openModal } = useDashboard();
+  const { getCustomerWithBalance, getCustomerLedger, getCustomerBill, openModal } = useDashboard();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -29,6 +29,7 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
   if (!customer) return null;
 
   const ledger = getCustomerLedger(customerId);
+  const bill = getCustomerBill(customerId);
 
   return (
     <div
@@ -113,9 +114,21 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
         </div>
 
         {/* Quick Action Buttons */}
-        <div className="px-6 py-3 bg-[#FFFDFB] border-b border-[#F0E4D4] flex items-center justify-between gap-3">
+        <div className="px-6 py-3 bg-[#FFFDFB] border-b border-[#F0E4D4] flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs font-bold text-kf-navy">Khata Actions:</div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {bill && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openModal("item-adjust", customer.id);
+                }}
+                className="px-3 py-1.5 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#8C4B00] border border-[#EADBCA] text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                ⚖️ Adjust Bill Item
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -140,61 +153,124 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
           </div>
         </div>
 
-        {/* Ledger History List */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-kf-navy pb-1">
-            <span>Transaction Ledger History</span>
-            <span className="text-[11px] text-[#556B82] font-semibold">
-              Opening Balance: Rs. {customer.openingBalance.toLocaleString()}
-            </span>
-          </div>
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {/* Itemized Bill Protection Breakdown if customer has an original bill */}
+          {bill && (
+            <div className="p-4 bg-[#FAF3E8] rounded-2xl border border-[#EADBCA]">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-kf-orange" />
+                  <h3 className="text-xs font-extrabold text-kf-navy uppercase tracking-wider">
+                    Original Source Bill #{bill.billNo}
+                  </h3>
+                </div>
+                <span className="text-[11px] font-bold text-[#556B82]">
+                  Total: Rs. {bill.totalAmount.toLocaleString()} • Paid: Rs. {bill.paidAmount.toLocaleString()}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#556B82] mb-3">
+                Protected item ledger: adjustments and allocations reconcile item-by-item against these exact lines.
+              </p>
 
-          {ledger.length === 0 ? (
-            <div className="text-center py-8 text-xs text-[#556B82] bg-[#FAF3E8] rounded-2xl border border-[#EADBCA] p-6">
-              No transactions recorded yet for this customer.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {ledger.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="p-3 rounded-xl border border-[#F0E4D4] bg-[#FCF8F2] flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
+              <div className="space-y-2">
+                {bill.items.map((it) => (
+                  <div
+                    key={it.id}
+                    className="p-3 bg-white rounded-xl border border-[#F0E4D4] flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-kf-navy">{it.name}</span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FAF3E8] text-[#556B82]">
+                          {it.quantity} {it.unit} @ Rs. {it.unitPrice.toLocaleString()}/{it.unit}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#556B82] mt-0.5">
+                        Line Total: Rs. {it.lineTotal.toLocaleString()} • Paid:{" "}
+                        <span className="text-green-700 font-bold">Rs. {it.paidAmount.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-[#8DA6BC] uppercase font-bold block">
+                        Remaining Due
+                      </span>
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                          tx.type === "credit"
-                            ? "bg-orange-100 text-kf-orange"
-                            : "bg-green-100 text-green-700"
+                        className={`font-extrabold ${
+                          it.remainingBalance === 0 ? "text-green-600" : "text-kf-orange"
                         }`}
                       >
-                        {tx.type === "credit" ? "Udhaar Given" : "Payment Received"}
+                        {it.remainingBalance === 0 ? "✓ Cleared (Rs. 0)" : `Rs. ${it.remainingBalance.toLocaleString()}`}
                       </span>
-                      <span className="text-[11px] text-[#8DA6BC] font-medium">{tx.date}</span>
-                      {tx.receiptNo && (
-                        <span className="text-[10px] text-[#8DA6BC]">#{tx.receiptNo}</span>
-                      )}
-                    </div>
-                    <p className="text-kf-navy font-semibold truncate">{tx.description}</p>
-                  </div>
-
-                  <div className="text-right flex-shrink-0">
-                    <div
-                      className={`font-extrabold ${
-                        tx.type === "credit" ? "text-kf-orange" : "text-green-600"
-                      }`}
-                    >
-                      {tx.type === "credit" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-[#556B82]">
-                      Bal: Rs. {tx.runningBalance.toLocaleString()}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Ledger History List */}
+          <div>
+            <div className="flex items-center justify-between text-xs font-bold text-kf-navy pb-2">
+              <span>Transaction Ledger History</span>
+              <span className="text-[11px] text-[#556B82] font-semibold">
+                Opening Balance: Rs. {customer.openingBalance.toLocaleString()}
+              </span>
+            </div>
+
+            {ledger.length === 0 ? (
+              <div className="text-center py-8 text-xs text-[#556B82] bg-[#FAF3E8] rounded-2xl border border-[#EADBCA] p-6">
+                No transactions recorded yet for this customer.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ledger.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="p-3 rounded-xl border border-[#F0E4D4] bg-[#FCF8F2] flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            tx.type === "credit"
+                              ? "bg-orange-100 text-kf-orange"
+                              : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {tx.type === "credit" ? "Udhaar Given" : "Payment Received"}
+                        </span>
+                        <span className="text-[11px] text-[#8DA6BC] font-medium">{tx.date}</span>
+                        {tx.receiptNo && (
+                          <span className="text-[10px] text-[#8DA6BC]">#{tx.receiptNo}</span>
+                        )}
+                        {tx.paymentMethod && (
+                          <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-[#EADBCA] text-[#556B82]">
+                            {tx.paymentMethod}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-kf-navy font-semibold truncate">{tx.description}</p>
+                    </div>
+
+                    <div className="text-right flex-shrink-0">
+                      <div
+                        className={`font-extrabold ${
+                          tx.type === "credit" ? "text-kf-orange" : "text-green-600"
+                        }`}
+                      >
+                        {tx.type === "credit" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-[#556B82]">
+                        Bal: Rs. {tx.runningBalance.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}

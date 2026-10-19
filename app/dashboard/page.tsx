@@ -15,10 +15,13 @@ export default function DashboardOverviewPage() {
     totalOutstandingCredit,
     totalCustomersCount,
     activeDebtorsCount,
+    getMonthlyProfit,
+    getYearlyProfit,
     openModal,
   } = useDashboard();
 
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<string | null>(null);
+  const [profitPeriod, setProfitPeriod] = useState<"2026-10" | "2026-09" | "2026-year">("2026-10");
 
   // Total payments received in current month
   const currentMonth = "2026-10";
@@ -29,6 +32,45 @@ export default function DashboardOverviewPage() {
   const monthlyExpenses = expenses
     .filter((e) => e.date.startsWith(currentMonth))
     .reduce((sum, e) => sum + e.amount, 0);
+
+  // Profit Metrics Calculation
+  const currentMonthProfit = getMonthlyProfit("2026-10");
+  const prevMonthProfit = getMonthlyProfit("2026-09");
+  const yearlyProfit = getYearlyProfit("2026");
+
+  const activeProfitData =
+    profitPeriod === "2026-year"
+      ? {
+          titleSuffix: "(Year 2026)",
+          sales: yearlyProfit.totalSales,
+          cogs: yearlyProfit.cogs,
+          grossProfit: yearlyProfit.grossProfit,
+          expenses: yearlyProfit.operatingExpenses,
+          netProfit: yearlyProfit.netProfit,
+          comparisonLabel: "+14.8% vs 2025 Annual",
+          isPositiveComparison: true,
+        }
+      : profitPeriod === "2026-09"
+      ? {
+          titleSuffix: "(Sep 2026)",
+          sales: prevMonthProfit.totalSales,
+          cogs: prevMonthProfit.cogs,
+          grossProfit: prevMonthProfit.grossProfit,
+          expenses: prevMonthProfit.operatingExpenses,
+          netProfit: prevMonthProfit.netProfit,
+          comparisonLabel: "Previous closed month",
+          isPositiveComparison: false,
+        }
+      : {
+          titleSuffix: "(Oct 2026)",
+          sales: currentMonthProfit.totalSales,
+          cogs: currentMonthProfit.cogs,
+          grossProfit: currentMonthProfit.grossProfit,
+          expenses: currentMonthProfit.operatingExpenses,
+          netProfit: currentMonthProfit.netProfit,
+          comparisonLabel: `+Rs. ${(currentMonthProfit.totalSales - prevMonthProfit.totalSales).toLocaleString()} vs Sep`,
+          isPositiveComparison: currentMonthProfit.totalSales >= prevMonthProfit.totalSales,
+        };
 
   // Sort top debtor customers (highest currentBalance first)
   const topDebtors = [...customersWithBalances]
@@ -87,6 +129,13 @@ export default function DashboardOverviewPage() {
             </button>
             <button
               type="button"
+              onClick={() => openModal("item-adjust")}
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl backdrop-blur-md border border-white/20 transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span>⚖️ Adjust Item</span>
+            </button>
+            <button
+              type="button"
               onClick={() => openModal("customer")}
               className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl backdrop-blur-md border border-white/20 transition-all cursor-pointer flex items-center gap-2"
             >
@@ -103,7 +152,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* 4 Key Stat Cards */}
+      {/* 4 Key Stat Cards (Existing Features Preserved) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
           title="Total Customers"
@@ -126,7 +175,7 @@ export default function DashboardOverviewPage() {
           value={`Rs. ${totalOutstandingCredit.toLocaleString()}`}
           subtitle="Money owed by customers"
           accentColor="orange"
-          trend={{ label: "Receivable", positive: false }}
+          trend={{ label: "Receivable (Asset)", positive: false }}
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
@@ -141,7 +190,7 @@ export default function DashboardOverviewPage() {
           value={`Rs. ${monthlyPayments.toLocaleString()}`}
           subtitle="Collected this month (Oct)"
           accentColor="green"
-          trend={{ label: "Cash Collected", positive: true }}
+          trend={{ label: "Cash Inflow", positive: true }}
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <rect width="20" height="14" x="2" y="5" rx="2" />
@@ -162,6 +211,135 @@ export default function DashboardOverviewPage() {
             </svg>
           }
         />
+      </div>
+
+      {/* NEW: BUSINESS PROFIT PERFORMANCE (P&L ACCRUAL SUMMARY) */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#EADBCA] shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F0E4D4]">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
+              <h3 className="text-base font-extrabold text-kf-navy tracking-tight">
+                Business Profit Summary (Accrual P&L)
+              </h3>
+            </div>
+            <p className="text-xs text-[#556B82] mt-0.5">
+              Strict accounting: Gross Profit = Sales − COGS | Net Profit = Gross Profit − Operating Expenses
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Reporting Period Selector */}
+            <div className="flex items-center gap-1 bg-[#F5ECE1] p-1 rounded-xl border border-[#EADBCA]">
+              <button
+                type="button"
+                onClick={() => setProfitPeriod("2026-10")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  profitPeriod === "2026-10"
+                    ? "bg-white text-kf-orange shadow-xs font-extrabold"
+                    : "text-[#556B82] hover:text-kf-navy"
+                }`}
+              >
+                Oct 2026
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfitPeriod("2026-09")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  profitPeriod === "2026-09"
+                    ? "bg-white text-kf-orange shadow-xs font-extrabold"
+                    : "text-[#556B82] hover:text-kf-navy"
+                }`}
+              >
+                Sep 2026
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfitPeriod("2026-year")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  profitPeriod === "2026-year"
+                    ? "bg-white text-kf-orange shadow-xs font-extrabold"
+                    : "text-[#556B82] hover:text-kf-navy"
+                }`}
+              >
+                Full Year 2026
+              </button>
+            </div>
+
+            <Link
+              href="/dashboard/reports"
+              className="text-xs font-bold text-kf-orange hover:text-[#E85E00] flex items-center gap-1 no-underline whitespace-nowrap ml-2"
+            >
+              <span>Full P&L Report</span>
+              <span>→</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* 4 P&L Headline Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-2xl bg-[#FCF8F2] border border-[#F0E4D4]">
+            <span className="text-[10px] uppercase font-bold text-[#8DA6BC] tracking-wider block">
+              Net Sales {activeProfitData.titleSuffix}
+            </span>
+            <div className="text-xl font-black text-kf-navy mt-1 tabular-nums">
+              Rs. {activeProfitData.sales.toLocaleString()}
+            </div>
+            <span className="text-[11px] font-semibold text-green-700 block mt-1">
+              {activeProfitData.comparisonLabel}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#FCF8F2] border border-[#F0E4D4]">
+            <span className="text-[10px] uppercase font-bold text-[#8DA6BC] tracking-wider block">
+              Cost of Goods (COGS)
+            </span>
+            <div className="text-xl font-black text-[#556B82] mt-1 tabular-nums">
+              Rs. {activeProfitData.cogs.toLocaleString()}
+            </div>
+            <span className="text-[11px] font-semibold text-[#8DA6BC] block mt-1">
+              Wholesale inventory purchase cost
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#FCF8F2] border border-[#F0E4D4]">
+            <span className="text-[10px] uppercase font-bold text-[#8DA6BC] tracking-wider block">
+              Operating Expenses
+            </span>
+            <div className="text-xl font-black text-kf-navy mt-1 tabular-nums">
+              Rs. {activeProfitData.expenses.toLocaleString()}
+            </div>
+            <span className="text-[11px] font-semibold text-[#8DA6BC] block mt-1">
+              Rent, bills, staff & transport
+            </span>
+          </div>
+
+          <div
+            className={`p-4 rounded-2xl border ${
+              activeProfitData.netProfit >= 0
+                ? "bg-green-50/50 border-green-200"
+                : "bg-red-50/40 border-red-200"
+            }`}
+          >
+            <span className="text-[10px] uppercase font-bold text-[#8DA6BC] tracking-wider block">
+              Net Profit / (Loss)
+            </span>
+            <div
+              className={`text-xl font-black mt-1 tabular-nums ${
+                activeProfitData.netProfit >= 0 ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              Rs. {activeProfitData.netProfit.toLocaleString()}
+            </div>
+            <span
+              className={`text-[11px] font-semibold block mt-1 ${
+                activeProfitData.netProfit >= 0 ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              {activeProfitData.netProfit >= 0 ? "Profitable trading" : "Net operating deficit"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Financial Activity Chart */}
