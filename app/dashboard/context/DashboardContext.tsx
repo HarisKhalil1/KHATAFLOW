@@ -71,23 +71,34 @@ export interface CustomerBill {
   totalCost: number;
   paidAmount: number;
   remainingBalance: number;
+  customerCredit?: number; // Preserves overpayment credit when paidAmount > totalAmount
   notes?: string;
 }
 
 export interface ItemAdjustment {
   id: string;
   billId: string;
+  billNo?: string;
   customerId: string;
+  customerName?: string;
   originalItemId: string;
   originalItemName: string;
   enteredItemName: string;
-  quantityAdjusted: number;
   unit: string;
+  originalQuantity: number;
+  originalUnitPrice: number;
+  originalLineTotal: number;
+  correctedQuantity: number;
+  correctedUnitPrice: number;
+  correctedLineTotal: number;
+  differenceAmount: number; // Positive = bill increased, Negative = bill reduced
+  // Legacy compatibility fields
+  quantityAdjusted: number;
   unitPrice: number;
-  originalUnitPrice?: number;
   amountAdjusted: number;
   reason: string;
   date: string;
+  timestamp?: string;
 }
 
 export interface PaymentItemAllocation {
@@ -131,6 +142,7 @@ export interface NotificationItem {
 
 export interface CustomerWithBalance extends Customer {
   currentBalance: number;
+  customerCredit?: number; // Preserves customer overpayment credit when payments exceed purchases
   totalCredit: number;
   totalPaid: number;
   totalAdjusted?: number;
@@ -200,20 +212,26 @@ interface DashboardContextType {
   activeDebtorsCount: number;
   getCustomerWithBalance: (id: string) => CustomerWithBalance | undefined;
   getCustomerLedger: (customerId: string) => LedgerEntryWithRunningBalance[];
-  getCustomerBill: (customerId: string) => CustomerBill | undefined;
+  getCustomerBills: (customerId: string) => CustomerBill[];
+  getCustomerBill: (customerId: string, billId?: string) => CustomerBill | undefined;
 
   // Item-wise Validation & Actions
   validateItemAdjustment: (
     customerId: string,
     enteredItemName: string,
-    quantity: number,
-    amount?: number
+    quantity?: number,
+    amount?: number,
+    billId?: string
   ) => ValidationResult;
 
   adjustBillItem: (data: {
     customerId: string;
-    enteredItemName: string;
-    quantity: number;
+    billId?: string;
+    itemId?: string;
+    enteredItemName?: string;
+    correctedQuantity?: number;
+    correctedUnitPrice?: number;
+    quantity?: number;
     unitPrice?: number;
     reason: string;
     date?: string;
@@ -230,6 +248,7 @@ interface DashboardContextType {
 
   recordPayment: (data: {
     customerId: string;
+    billId?: string;
     amount: number;
     date: string;
     paymentMethod: PaymentMethod;
@@ -347,7 +366,7 @@ const INITIAL_CUSTOMERS: Customer[] = [
 
 // Verified initial store bills as authoritative source of truth for each customer
 const INITIAL_BILLS: CustomerBill[] = [
-  // Tariq Khan (cust-1)
+  // Tariq Khan (cust-1) - Original Bill #BILL-1001 (Rs. 15,000)
   {
     id: "bill-1001",
     billNo: "BILL-1001",
@@ -778,7 +797,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
-const STORAGE_KEY = "KHATAFLOW_STORAGE_V1";
+const STORAGE_KEY = "KHATAFLOW_STORAGE_V3";
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => STANDARD_PRODUCTS);
@@ -875,7 +894,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      const currentBalance = c.openingBalance + totalCredit - totalPaid - totalAdjusted;
+      const netOwed = c.openingBalance + totalCredit - totalPaid - totalAdjusted;
+      const currentBalance = netOwed > 0 ? netOwed : 0;
+      const customerCredit = netOwed < 0 ? Math.abs(netOwed) : 0;
 
       // Update status dynamically
       let dynamicStatus = c.status;
@@ -888,7 +909,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       return {
         ...c,
         status: dynamicStatus,
-        currentBalance: Math.max(0, currentBalance),
+        currentBalance,
+        customerCredit,
         totalCredit,
         totalPaid,
         totalAdjusted,
@@ -918,10 +940,21 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [customersWithBalances]
   );
 
+  const getCustomerBills = useCallback(
+    (customerId: string): CustomerBill[] => {
+      return bills.filter((b) => b.customerId === customerId);
+    },
+    [bills]
+  );
+
   const getCustomerBill = useCallback(
-    (customerId: string): CustomerBill | undefined => {
+    (customerId: string, billId?: string): CustomerBill | undefined => {
       const custBills = bills.filter((b) => b.customerId === customerId);
       if (custBills.length === 0) return undefined;
+      if (billId) {
+        const found = custBills.find((b) => b.id === billId);
+        if (found) return found;
+      }
       if (custBills.length === 1) return custBills[0];
 
       // Consolidated bill representation for customer
@@ -939,6 +972,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         totalCost: custBills.reduce((sum, b) => sum + b.totalCost, 0),
         paidAmount,
         remainingBalance: Math.max(0, totalAmount - paidAmount),
+        customerCredit: Math.max(0, paidAmount - totalAmount),
         notes: custBills.map((b) => b.notes).filter(Boolean).join("; "),
       };
     },
@@ -978,77 +1012,67 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   // ITEM VALIDATION LOGIC:
   // Validates item entries against customer's original bill items.
-  // When an invalid item like "Sugar" is entered against Tariq's bill (Rice, Dalda oil, Eggs):
-  // Returns clear warning: "This item does not match Tariq's original bill. The original bill contains Rice, not Sugar. Please review the original ledger."
+  // Supports universal parity across all customers & bills.
   const validateItemAdjustment = useCallback(
     (
       customerId: string,
       enteredItemName: string,
-      quantity: number,
-      amount?: number
+      quantity?: number,
+      unitPrice?: number,
+      billId?: string
     ): ValidationResult => {
       const customer = customers.find((c) => c.id === customerId);
       if (!customer) {
         return { isValid: false, errorMessage: "Customer not found." };
       }
 
-      const bill = bills.find((b) => b.customerId === customerId);
-      if (!bill || bill.items.length === 0) {
+      const custBills = bills.filter((b) => b.customerId === customerId);
+      if (custBills.length === 0 || custBills.every((b) => b.items.length === 0)) {
         return {
           isValid: false,
           errorMessage: `No original itemized bill on file for ${customer.name}. Item-wise adjustments require an original bill.`,
         };
       }
 
+      // If a specific billId is requested, search within that bill, else search across customer's bills
+      const targetBills = billId ? custBills.filter((b) => b.id === billId) : custBills;
+      const allCustomerItems = targetBills.flatMap((b) => b.items);
+
       const cleanEnteredName = enteredItemName.trim().toLowerCase();
       if (!cleanEnteredName) {
-        return { isValid: false, errorMessage: "Please enter or select an item name." };
+        return { isValid: false, errorMessage: "Please select or enter an item name from the customer's bill." };
       }
 
-      // Check item identity against customer's original bill items
-      const matched = bill.items.find(
-        (it) => it.name.trim().toLowerCase() === cleanEnteredName
+      const matched = allCustomerItems.find(
+        (it) => it.name.trim().toLowerCase() === cleanEnteredName || it.id === enteredItemName
       );
 
       if (!matched) {
-        const originalItemList = bill.items.map((i) => i.name).join(", ");
+        const originalItemList = Array.from(new Set(allCustomerItems.map((i) => i.name))).join(", ");
         return {
           isValid: false,
           errorMessage: `This item does not match ${customer.name}'s original bill. The original bill contains ${originalItemList}, not ${enteredItemName.trim()}. Please review the original ledger.`,
-          suggestedItems: bill.items.map((i) => `${i.name} (${i.quantity} ${i.unit})`),
+          suggestedItems: allCustomerItems.map((i) => `${i.name} (${i.quantity} ${i.unit})`),
         };
       }
 
-      // Quantity validation
-      if (isNaN(quantity) || quantity <= 0) {
-        return {
-          isValid: false,
-          errorMessage: "Adjustment quantity must be greater than zero.",
-          matchedItem: matched,
-        };
-      }
-
-      if (quantity > matched.quantity) {
-        return {
-          isValid: false,
-          errorMessage: `Adjustment quantity (${quantity} ${matched.unit}) exceeds original quantity of ${matched.quantity} ${matched.unit} on ${matched.name}.`,
-          matchedItem: matched,
-        };
-      }
-
-      // Amount validation if provided
-      if (amount !== undefined) {
-        if (isNaN(amount) || amount <= 0) {
+      // Quantity validation if provided
+      if (quantity !== undefined) {
+        if (isNaN(quantity) || quantity <= 0) {
           return {
             isValid: false,
-            errorMessage: "Adjustment amount must be a positive number.",
+            errorMessage: "Corrected quantity must be greater than zero.",
             matchedItem: matched,
           };
         }
-        if (amount > matched.remainingBalance) {
+      }
+
+      // Unit price validation if provided
+      if (unitPrice !== undefined) {
+        if (isNaN(unitPrice) || unitPrice <= 0) {
           return {
             isValid: false,
-            errorMessage: `Adjustment amount (Rs. ${amount.toLocaleString()}) exceeds the remaining unpaid balance of Rs. ${matched.remainingBalance.toLocaleString()} for ${matched.name}.`,
+            errorMessage: "Unit price must be greater than zero.",
             matchedItem: matched,
           };
         }
@@ -1063,125 +1087,229 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Apply an approved item adjustment to the customer's bill & ledger
+  // Universal: works consistently for ALL customers and bills
   const adjustBillItem = useCallback(
     (data: {
       customerId: string;
-      enteredItemName: string;
-      quantity: number;
+      billId?: string;
+      itemId?: string;
+      enteredItemName?: string;
+      correctedQuantity?: number;
+      correctedUnitPrice?: number;
+      quantity?: number;
       unitPrice?: number;
       reason: string;
       date?: string;
     }) => {
-      const validation = validateItemAdjustment(
-        data.customerId,
-        data.enteredItemName,
-        data.quantity
-      );
+      const customer = customers.find((c) => c.id === data.customerId);
+      if (!customer) {
+        return { success: false, error: "Customer not found." };
+      }
 
-      if (!validation.isValid || !validation.matchedItem) {
+      const custBills = bills.filter((b) => b.customerId === data.customerId);
+      if (custBills.length === 0) {
+        return { success: false, error: "Customer has no original bills on record." };
+      }
+
+      // Locate target bill & target item
+      let targetBill: CustomerBill | undefined;
+      let matchedItem: BillItem | undefined;
+
+      if (data.billId && data.itemId) {
+        targetBill = custBills.find((b) => b.id === data.billId);
+        matchedItem = targetBill?.items.find((it) => it.id === data.itemId);
+      }
+
+      if (!matchedItem && data.itemId) {
+        for (const b of custBills) {
+          const item = b.items.find((it) => it.id === data.itemId);
+          if (item) {
+            targetBill = b;
+            matchedItem = item;
+            break;
+          }
+        }
+      }
+
+      if (!matchedItem && data.enteredItemName) {
+        const cleanName = data.enteredItemName.trim().toLowerCase();
+        for (const b of custBills) {
+          const item = b.items.find((it) => it.name.trim().toLowerCase() === cleanName);
+          if (item) {
+            targetBill = b;
+            matchedItem = item;
+            break;
+          }
+        }
+      }
+
+      if (!targetBill || !matchedItem) {
         return {
           success: false,
-          error: validation.errorMessage || "Invalid item adjustment.",
+          error: "Selected item could not be found on any original bill for this customer.",
         };
       }
 
-      const matchedItem = validation.matchedItem;
-      const customer = customers.find((c) => c.id === data.customerId)!;
-      const bill = bills.find((b) => b.customerId === data.customerId)!;
+      // Determine corrected quantity
+      const newQty =
+        data.correctedQuantity !== undefined
+          ? Number(data.correctedQuantity)
+          : data.quantity !== undefined
+          ? Number(data.quantity)
+          : matchedItem.quantity;
 
-      // Allow correcting the historical unit price (e.g. from Rs. 454.55 to Rs. 500)
-      const effectiveUnitPrice =
-        data.unitPrice !== undefined && Number(data.unitPrice) > 0
+      if (isNaN(newQty) || newQty <= 0) {
+        return { success: false, error: "Quantity must be greater than zero." };
+      }
+
+      // Determine corrected unit price
+      const newPrice =
+        data.correctedUnitPrice !== undefined
+          ? Number(data.correctedUnitPrice)
+          : data.unitPrice !== undefined
           ? Number(data.unitPrice)
           : matchedItem.unitPrice;
 
-      const priceWasCorrected = Math.abs(effectiveUnitPrice - matchedItem.unitPrice) > 0.001;
+      if (isNaN(newPrice) || newPrice <= 0) {
+        return { success: false, error: "Unit price must be greater than zero." };
+      }
 
-      // Calculate adjustment amount using the effective unit price
-      const calculatedAmount = Math.round(data.quantity * effectiveUnitPrice);
+      if (!data.reason || !data.reason.trim()) {
+        return { success: false, error: "Please enter a valid reason for this adjustment." };
+      }
 
+      // Original metrics
+      const originalQuantity = matchedItem.quantity;
+      const originalUnitPrice = matchedItem.unitPrice;
+      const originalLineTotal = Math.round(originalQuantity * originalUnitPrice * 100) / 100;
+
+      // Corrected metrics
+      const correctedQuantity = newQty;
+      const correctedUnitPrice = newPrice;
+      const correctedLineTotal = Math.round(correctedQuantity * correctedUnitPrice * 100) / 100;
+
+      // Difference in line total: positive means increase, negative means reduction
+      const differenceAmount = Math.round((correctedLineTotal - originalLineTotal) * 100) / 100;
+
+      const dateStr = data.date || new Date().toISOString().split("T")[0];
+
+      // Create permanent audit adjustment record
       const newAdjustment: ItemAdjustment = {
         id: `adj-${Date.now()}`,
-        billId: bill.id,
+        billId: targetBill.id,
+        billNo: targetBill.billNo,
         customerId: customer.id,
+        customerName: customer.name,
         originalItemId: matchedItem.id,
         originalItemName: matchedItem.name,
-        enteredItemName: data.enteredItemName.trim(),
-        quantityAdjusted: data.quantity,
+        enteredItemName: (data.enteredItemName || matchedItem.name).trim(),
         unit: matchedItem.unit,
-        unitPrice: effectiveUnitPrice,
-        originalUnitPrice: matchedItem.unitPrice,
-        amountAdjusted: calculatedAmount,
+        originalQuantity,
+        originalUnitPrice,
+        originalLineTotal,
+        correctedQuantity,
+        correctedUnitPrice,
+        correctedLineTotal,
+        differenceAmount,
+        quantityAdjusted: Math.abs(correctedQuantity - originalQuantity),
+        unitPrice: correctedUnitPrice,
+        amountAdjusted: Math.abs(differenceAmount),
         reason: data.reason.trim(),
-        date: data.date || new Date().toISOString().split("T")[0],
+        date: dateStr,
+        timestamp: new Date().toISOString(),
       };
 
-      // Update bill item quantity & balance safely
+      // 1. Update bill and items with precision, preserving payments
       setBills((prevBills) =>
         prevBills.map((b) => {
-          if (b.id !== bill.id) return b;
+          if (b.id !== targetBill!.id) return b;
+
           const updatedItems = b.items.map((it) => {
-            if (it.id !== matchedItem.id) return it;
-            const newQty = Math.max(0, it.quantity - data.quantity);
-            // If the unit price was corrected, update unitPrice for this item on the bill
-            const itemUnitPrice = priceWasCorrected ? effectiveUnitPrice : it.unitPrice;
-            const newLineTotal = Math.round(newQty * itemUnitPrice);
+            if (it.id !== matchedItem!.id) return it;
+            const newLineTotal = correctedLineTotal;
             const newRemaining = Math.max(0, newLineTotal - it.paidAmount);
             return {
               ...it,
-              quantity: newQty,
-              unitPrice: itemUnitPrice,
+              quantity: correctedQuantity,
+              unitPrice: correctedUnitPrice,
               lineTotal: newLineTotal,
               remainingBalance: newRemaining,
             };
           });
 
-          const newTotal = updatedItems.reduce((sum, i) => sum + i.lineTotal, 0);
-          const newRemaining = Math.max(0, newTotal - b.paidAmount);
+          const newTotalAmount = updatedItems.reduce((sum, it) => sum + it.lineTotal, 0);
+          const preservedPaid = b.paidAmount; // Genuine payments preserved
+          const newRemainingBalance = Math.max(0, newTotalAmount - preservedPaid);
+          const overpaymentCredit = Math.max(0, preservedPaid - newTotalAmount);
 
           return {
             ...b,
             items: updatedItems,
-            totalAmount: newTotal,
-            remainingBalance: newRemaining,
+            totalAmount: newTotalAmount,
+            paidAmount: preservedPaid,
+            remainingBalance: newRemainingBalance,
+            customerCredit: overpaymentCredit,
           };
         })
       );
 
-      // Record adjustment in transactions to maintain mathematical consistency
-      const priceDetailNote = priceWasCorrected
-        ? ` (Rate corrected from Rs. ${matchedItem.unitPrice.toLocaleString()}/${matchedItem.unit} to Rs. ${effectiveUnitPrice.toLocaleString()}/${matchedItem.unit})`
-        : "";
+      // 2. Record ledger transaction to keep ledger & running balance strictly reconciled
+      if (differenceAmount !== 0) {
+        if (differenceAmount < 0) {
+          // Reduction in bill: ledger adjustment transaction
+          const reductionTx: LedgerTransaction = {
+            id: `tx-adj-${Date.now()}`,
+            customerId: customer.id,
+            customerName: customer.name,
+            type: "adjustment",
+            amount: Math.abs(differenceAmount),
+            date: dateStr,
+            description: `Item Adjustment on Bill #${targetBill.billNo}: ${matchedItem.name} corrected from ${originalQuantity} ${matchedItem.unit} @ Rs. ${originalUnitPrice.toLocaleString()} (Rs. ${originalLineTotal.toLocaleString()}) to ${correctedQuantity} ${matchedItem.unit} @ Rs. ${correctedUnitPrice.toLocaleString()} (Rs. ${correctedLineTotal.toLocaleString()}). Correction: -Rs. ${Math.abs(differenceAmount).toLocaleString()} (${data.reason.trim()})`,
+            receiptNo: `ADJ-${targetBill.billNo}`,
+            billId: targetBill.id,
+          };
+          setTransactions((prev) => [reductionTx, ...prev]);
+        } else {
+          // Upward correction in bill: credit transaction
+          const upwardTx: LedgerTransaction = {
+            id: `tx-adj-${Date.now()}`,
+            customerId: customer.id,
+            customerName: customer.name,
+            type: "credit",
+            amount: differenceAmount,
+            date: dateStr,
+            description: `Upward Correction on Bill #${targetBill.billNo}: ${matchedItem.name} corrected from ${originalQuantity} ${matchedItem.unit} @ Rs. ${originalUnitPrice.toLocaleString()} (Rs. ${originalLineTotal.toLocaleString()}) to ${correctedQuantity} ${matchedItem.unit} @ Rs. ${correctedUnitPrice.toLocaleString()} (Rs. ${correctedLineTotal.toLocaleString()}). Correction: +Rs. ${differenceAmount.toLocaleString()} (${data.reason.trim()})`,
+            receiptNo: `ADJ-${targetBill.billNo}`,
+            billId: targetBill.id,
+          };
+          setTransactions((prev) => [upwardTx, ...prev]);
+        }
+      }
 
-      const adjustmentTx: LedgerTransaction = {
-        id: `tx-adj-${Date.now()}`,
-        customerId: customer.id,
-        customerName: customer.name,
-        type: "adjustment", // Dedicated adjustment type (NOT a cash payment)
-        amount: calculatedAmount,
-        date: newAdjustment.date,
-        description: `Item Adjustment: Return/correction of ${data.quantity} ${matchedItem.unit} ${matchedItem.name} @ Rs. ${effectiveUnitPrice.toLocaleString()}/${matchedItem.unit}${priceDetailNote} (${data.reason})`,
-        receiptNo: `ADJ-${bill.billNo}`,
-        billId: bill.id,
-      };
-
-      setTransactions((prev) => [adjustmentTx, ...prev]);
+      // 3. Save adjustment audit record
       setAdjustments((prev) => [newAdjustment, ...prev]);
 
-      // Notification
+      // 4. Notification
+      const diffSign =
+        differenceAmount < 0
+          ? `-Rs. ${Math.abs(differenceAmount).toLocaleString()}`
+          : `+Rs. ${differenceAmount.toLocaleString()}`;
       const newNotif: NotificationItem = {
         id: `notif-${Date.now()}`,
-        title: "Item Adjustment Applied",
-        message: `${matchedItem.name} (${data.quantity} ${matchedItem.unit}) adjusted on ${customer.name}'s bill #${bill.billNo} for Rs. ${calculatedAmount.toLocaleString()}.${priceWasCorrected ? ` Rate: Rs. ${effectiveUnitPrice}.` : ""}`,
+        title: "Bill Item Adjusted",
+        message: `${matchedItem.name} adjusted on ${customer.name}'s bill #${targetBill.billNo} (${diffSign}). New Bill Total: Rs. ${(targetBill.totalAmount + differenceAmount).toLocaleString()}.`,
         time: "Just now",
         type: "info",
         read: false,
       };
       setNotifications((prev) => [newNotif, ...prev]);
 
-      return { success: true, adjustment: newAdjustment };
+      return {
+        success: true,
+        adjustment: newAdjustment,
+      };
     },
-    [validateItemAdjustment, customers, bills]
+    [customers, bills]
   );
 
   // Product Catalog Actions
@@ -1325,6 +1453,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const recordPayment = useCallback(
     (data: {
       customerId: string;
+      billId?: string;
       amount: number;
       date: string;
       paymentMethod: PaymentMethod;
@@ -1348,16 +1477,29 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      // Item Allocation Validation if provided
-      const customerBill = bills.find((b) => b.customerId === data.customerId);
-      if (data.itemAllocations && data.itemAllocations.length > 0) {
-        if (!customerBill) {
-          return {
-            success: false,
-            error: "Item allocation was submitted, but this customer has no itemized bill on file.",
-          };
-        }
+      // Locate customer's bills
+      const custBills = bills.filter((b) => b.customerId === data.customerId);
+      let targetBill: CustomerBill | undefined;
 
+      if (data.billId) {
+        targetBill = custBills.find((b) => b.id === data.billId);
+      } else if (custBills.length === 1) {
+        targetBill = custBills[0];
+      } else if (data.itemAllocations && data.itemAllocations.length > 0) {
+        for (const alloc of data.itemAllocations) {
+          const found = custBills.find((b) => b.items.some((it) => it.id === alloc.itemId));
+          if (found) {
+            targetBill = found;
+            break;
+          }
+        }
+      }
+      if (!targetBill && custBills.length > 0) {
+        targetBill = custBills.find((b) => b.remainingBalance > 0) || custBills[0];
+      }
+
+      // Validate item allocations if provided
+      if (data.itemAllocations && data.itemAllocations.length > 0) {
         const totalAllocated = data.itemAllocations.reduce(
           (sum, a) => sum + Number(a.allocatedAmount || 0),
           0
@@ -1366,16 +1508,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         if (totalAllocated > numAmount) {
           return {
             success: false,
-            error: `Total allocated amount (Rs. ${totalAllocated.toLocaleString()}) cannot exceed the payment amount of Rs. ${numAmount.toLocaleString()}.`,
+            error: `Total item allocation (Rs. ${totalAllocated.toLocaleString()}) cannot exceed the payment amount of Rs. ${numAmount.toLocaleString()}.`,
           };
         }
 
-        // Collect all items across all bills for this customer
-        const allCustItems = bills
-          .filter((b) => b.customerId === data.customerId)
-          .flatMap((b) => b.items);
+        const allCustItems = custBills.flatMap((b) => b.items);
 
-        // Validate each allocation against item's remaining balance
         for (const alloc of data.itemAllocations) {
           if (alloc.allocatedAmount <= 0) continue;
           const targetItem = allCustItems.find((i) => i.id === alloc.itemId);
@@ -1388,39 +1526,46 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           if (alloc.allocatedAmount > targetItem.remainingBalance) {
             return {
               success: false,
-              error: `Allocation of Rs. ${alloc.allocatedAmount.toLocaleString()} to ${targetItem.name} exceeds its remaining balance of Rs. ${targetItem.remainingBalance.toLocaleString()}.`,
+              error: `Allocation of Rs. ${alloc.allocatedAmount.toLocaleString()} to ${targetItem.name} exceeds its remaining unpaid balance of Rs. ${targetItem.remainingBalance.toLocaleString()}.`,
             };
           }
         }
-
-        // Update bill items with allocations
-        setBills((prevBills) =>
-          prevBills.map((b) => {
-            if (b.customerId !== data.customerId) return b;
-            const updatedItems = b.items.map((it) => {
-              const matchedAlloc = data.itemAllocations?.find((a) => a.itemId === it.id);
-              if (!matchedAlloc || matchedAlloc.allocatedAmount <= 0) return it;
-              const newPaid = it.paidAmount + matchedAlloc.allocatedAmount;
-              const newRemaining = Math.max(0, it.lineTotal - newPaid);
-              return {
-                ...it,
-                paidAmount: newPaid,
-                remainingBalance: newRemaining,
-              };
-            });
-
-            const newTotalPaid = updatedItems.reduce((sum, i) => sum + i.paidAmount, 0);
-            const newTotalRemaining = Math.max(0, b.totalAmount - newTotalPaid);
-
-            return {
-              ...b,
-              items: updatedItems,
-              paidAmount: newTotalPaid,
-              remainingBalance: newTotalRemaining,
-            };
-          })
-        );
       }
+
+      // Update bill and items with precision
+      setBills((prevBills) =>
+        prevBills.map((b) => {
+          if (targetBill && b.id !== targetBill.id) return b;
+          if (!targetBill && b.customerId !== data.customerId) return b;
+
+          // 1. Update items that received allocations
+          const updatedItems = b.items.map((it) => {
+            const matchedAlloc = data.itemAllocations?.find((a) => a.itemId === it.id);
+            if (!matchedAlloc || matchedAlloc.allocatedAmount <= 0) return it;
+            const newPaid = it.paidAmount + matchedAlloc.allocatedAmount;
+            const newRemaining = Math.max(0, it.lineTotal - newPaid);
+            return {
+              ...it,
+              paidAmount: newPaid,
+              remainingBalance: newRemaining,
+            };
+          });
+
+          // 2. Update bill-level payment and outstanding balance
+          // Formula: Outstanding = Bill Total - Total Valid Payments!
+          const newTotalPaid = b.paidAmount + numAmount;
+          const newTotalRemaining = Math.max(0, b.totalAmount - newTotalPaid);
+          const customerCredit = Math.max(0, newTotalPaid - b.totalAmount);
+
+          return {
+            ...b,
+            items: updatedItems,
+            paidAmount: newTotalPaid,
+            remainingBalance: newTotalRemaining,
+            customerCredit,
+          };
+        })
+      );
 
       // Build descriptive line mentioning allocation breakdown if present
       let finalDescription = data.description?.trim();
@@ -1436,6 +1581,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Record transaction with EXACT entered amount
       const newTx: LedgerTransaction = {
         id: `tx-${Date.now()}`,
         customerId: customer.id,
@@ -1446,7 +1592,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         description: finalDescription,
         paymentMethod: data.paymentMethod,
         itemAllocations: data.itemAllocations,
-        billId: customerBill?.id,
+        billId: targetBill?.id,
       };
 
       setTransactions((prev) => [newTx, ...prev]);
@@ -1455,7 +1601,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const newNotif: NotificationItem = {
         id: `notif-${Date.now()}`,
         title: "Payment Received",
-        message: `Rs. ${numAmount.toLocaleString()} received from ${customer.name}. New balance: Rs. ${(customer.currentBalance - numAmount).toLocaleString()}`,
+        message: `Rs. ${numAmount.toLocaleString()} received from ${customer.name}. New outstanding: Rs. ${(customer.currentBalance - numAmount).toLocaleString()}`,
         time: "Just now",
         type: "payment",
         read: false,
@@ -1888,6 +2034,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         activeDebtorsCount,
         getCustomerWithBalance,
         getCustomerLedger,
+        getCustomerBills,
         getCustomerBill,
         validateItemAdjustment,
         adjustBillItem,

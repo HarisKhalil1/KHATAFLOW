@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useDashboard, PaymentMethod, PaymentItemAllocation } from "../context/DashboardContext";
 import WhatsAppShareModal from "./WhatsAppShareModal";
 import { generatePaymentReceiptText } from "../utils/whatsapp";
@@ -34,6 +34,7 @@ export default function RecordPaymentModal() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [recordedAmount, setRecordedAmount] = useState(0);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   // Item allocations state map: itemId -> allocatedAmount string
@@ -47,9 +48,7 @@ export default function RecordPaymentModal() {
 
   const bill = getCustomerBill(customerId);
 
-  // FILTER OUT FULLY PAID ITEMS:
-  // Only items with remainingBalance > 0 appear in pending payments.
-  // Fully paid items (remainingBalance === 0) are excluded from the pending list.
+  // Pending items that have remaining balance > 0
   const pendingItems = (bill?.items || []).filter((item) => item.remainingBalance > 0);
   const hasBillItemsOnRecord = (bill?.items || []).length > 0;
 
@@ -57,33 +56,49 @@ export default function RecordPaymentModal() {
   const handleCustomerChange = (newCustId: string) => {
     setCustomerId(newCustId);
     setItemAllocations({});
+    setAmount("");
     setError(null);
   };
 
-  // Compute total allocated
-  const totalAllocated = Object.values(itemAllocations).reduce((sum, val) => {
-    const n = parseFloat(val) || 0;
-    return sum + (n > 0 ? n : 0);
-  }, 0);
+  // Compute total allocated across items
+  const totalAllocated = useMemo(() => {
+    return Object.values(itemAllocations).reduce((sum, val) => {
+      const n = parseFloat(val) || 0;
+      return sum + (n > 0 ? n : 0);
+    }, 0);
+  }, [itemAllocations]);
 
   const unallocatedAmount = Math.max(0, numAmount - totalAllocated);
   const allocationExceedsPayment = totalAllocated > numAmount && numAmount > 0;
 
-
+  // Two-way sync: changing item allocation automatically updates amount
   const handleItemAllocationChange = (itemId: string, val: string) => {
-    setItemAllocations((prev) => ({
-      ...prev,
-      [itemId]: val,
-    }));
-    setError(null);
-  };
-
-  // Click price button "Pay Due" to allocate full remaining balance of an item
-  const handlePayDue = (itemId: string, dueAmount: number) => {
     setItemAllocations((prev) => {
       const updated = {
         ...prev,
-        [itemId]: dueAmount.toString(),
+        [itemId]: val,
+      };
+
+      const newTotal = Object.entries(updated).reduce((sum, [, v]) => {
+        const n = parseFloat(v) || 0;
+        return sum + (n > 0 ? n : 0);
+      }, 0);
+
+      if (newTotal > 0) {
+        setAmount(newTotal.toString());
+      }
+
+      return updated;
+    });
+    setError(null);
+  };
+
+  // Quick action: Allocate specific amount to an item
+  const handleAllocateSpecific = (itemId: string, allocAmt: number) => {
+    setItemAllocations((prev) => {
+      const updated = {
+        ...prev,
+        [itemId]: allocAmt.toString(),
       };
 
       const newTotalAlloc = Object.entries(updated).reduce((sum, [, val]) => {
@@ -91,15 +106,27 @@ export default function RecordPaymentModal() {
         return sum + (n > 0 ? n : 0);
       }, 0);
 
-      setAmount((currAmount) => {
-        const curr = parseFloat(currAmount) || 0;
-        return curr < newTotalAlloc ? newTotalAlloc.toString() : currAmount;
-      });
-
+      setAmount(newTotalAlloc.toString());
       return updated;
     });
     setError(null);
   };
+
+  // Formatted allocations array for submission
+  const formattedAllocations: PaymentItemAllocation[] = useMemo(() => {
+    if (!useItemAllocation || pendingItems.length === 0) return [];
+    return Object.entries(itemAllocations)
+      .map(([itemId, valStr]) => {
+        const item = pendingItems.find((i) => i.id === itemId);
+        const allocatedNum = parseFloat(valStr) || 0;
+        return {
+          itemId,
+          itemName: item ? item.name : itemId,
+          allocatedAmount: allocatedNum,
+        };
+      })
+      .filter((a) => a.allocatedAmount > 0);
+  }, [useItemAllocation, pendingItems, itemAllocations]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,8 +149,6 @@ export default function RecordPaymentModal() {
       return;
     }
 
-    // Format item allocations array if used
-    let formattedAllocations: PaymentItemAllocation[] | undefined;
     if (useItemAllocation && pendingItems.length > 0) {
       if (allocationExceedsPayment) {
         setError(
@@ -132,24 +157,12 @@ export default function RecordPaymentModal() {
         return;
       }
 
-      formattedAllocations = Object.entries(itemAllocations)
-        .map(([itemId, valStr]) => {
-          const item = pendingItems.find((i) => i.id === itemId);
-          const allocatedNum = parseFloat(valStr) || 0;
-          return {
-            itemId,
-            itemName: item ? item.name : itemId,
-            allocatedAmount: allocatedNum,
-          };
-        })
-        .filter((a) => a.allocatedAmount > 0);
-
       // Validate individual item balances
       for (const alloc of formattedAllocations) {
         const item = pendingItems.find((i) => i.id === alloc.itemId);
         if (item && alloc.allocatedAmount > item.remainingBalance) {
           setError(
-            `Allocation of Rs. ${alloc.allocatedAmount.toLocaleString()} to ${item.name} exceeds remaining balance of Rs. ${item.remainingBalance.toLocaleString()}.`
+            `Allocation of Rs. ${alloc.allocatedAmount.toLocaleString()} to ${item.name} exceeds its remaining balance of Rs. ${item.remainingBalance.toLocaleString()}.`
           );
           return;
         }
@@ -159,11 +172,12 @@ export default function RecordPaymentModal() {
     setIsSubmitting(true);
     const result = recordPayment({
       customerId,
+      billId: bill?.id,
       amount: numAmount,
       date,
       paymentMethod,
       description: description.trim() || undefined,
-      itemAllocations: formattedAllocations,
+      itemAllocations: formattedAllocations.length > 0 ? formattedAllocations : undefined,
     });
 
     setIsSubmitting(false);
@@ -171,6 +185,7 @@ export default function RecordPaymentModal() {
     if (!result.success) {
       setError(result.error || "Failed to record payment.");
     } else {
+      setRecordedAmount(numAmount);
       setSuccessMsg(`Payment of Rs. ${numAmount.toLocaleString()} successfully recorded!`);
       setPaymentRecorded(true);
     }
@@ -195,7 +210,7 @@ export default function RecordPaymentModal() {
                 Record Customer Payment
               </h2>
               <p className="text-xs text-[#556B82]">
-                Accurate cash collection & pending item-level allocation
+                Accurate payment recording &amp; live bill outstanding recalculation
               </p>
             </div>
           </div>
@@ -220,7 +235,8 @@ export default function RecordPaymentModal() {
             <div>
               <h3 className="text-base font-extrabold text-kf-navy">Payment Recorded Successfully</h3>
               <p className="text-xs text-[#556B82] mt-1 max-w-sm mx-auto">
-                Rs. {numAmount.toLocaleString()} received from <strong>{selectedCustomer?.name}</strong>. Remaining balance: <strong className="text-green-700">Rs. {Math.max(0, currentBalance - numAmount).toLocaleString()}</strong>.
+                Rs. {recordedAmount.toLocaleString()} received from <strong>{selectedCustomer?.name}</strong>.
+                Remaining balance: <strong className="text-green-700">Rs. {Math.max(0, currentBalance - recordedAmount).toLocaleString()}</strong>.
               </p>
             </div>
 
@@ -254,8 +270,8 @@ export default function RecordPaymentModal() {
                 customerName: selectedCustomer?.name || "",
                 receiptNo: `REC-${Date.now().toString().slice(-4)}`,
                 date,
-                amountPaid: numAmount,
-                newBalance: Math.max(0, currentBalance - numAmount),
+                amountPaid: recordedAmount,
+                newBalance: Math.max(0, currentBalance - recordedAmount),
                 paymentMethod,
                 lang: "en",
               })}
@@ -263,8 +279,8 @@ export default function RecordPaymentModal() {
                 customerName: selectedCustomer?.name || "",
                 receiptNo: `REC-${Date.now().toString().slice(-4)}`,
                 date,
-                amountPaid: numAmount,
-                newBalance: Math.max(0, currentBalance - numAmount),
+                amountPaid: recordedAmount,
+                newBalance: Math.max(0, currentBalance - recordedAmount),
                 paymentMethod,
                 lang: "ur",
               })}
@@ -273,317 +289,420 @@ export default function RecordPaymentModal() {
         ) : (
           <>
             {/* Success Feedback */}
-        {successMsg && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-xl text-xs font-bold flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span>{successMsg}</span>
-          </div>
-        )}
-
-        {/* Error Feedback */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-start gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Customer Selection */}
-          <div>
-            <label htmlFor="payment-customer-select" className="block text-xs font-bold text-kf-navy mb-1.5">
-              Select Customer <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="payment-customer-select"
-              value={customerId}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-              required
-              className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
-            >
-              <option value="" disabled>Select customer...</option>
-              {customersWithBalances.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} — Rs. {c.currentBalance.toLocaleString()} {c.currentBalance === 0 ? "(Cleared)" : "owed"}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Current Balance Notice */}
-          {selectedCustomer && (
-            <div className="p-3 bg-[#FFF8F0] border border-[#FFE2C2] rounded-xl flex items-center justify-between text-xs">
-              <span className="text-[#556B82] font-semibold">Current Outstanding Balance:</span>
-              <span className="font-extrabold text-kf-navy text-sm">
-                Rs. {currentBalance.toLocaleString()}
-              </span>
-            </div>
-          )}
-
-          {/* Amount */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="payment-amount-input" className="text-xs font-bold text-kf-navy">
-                Payment Amount (PKR) <span className="text-red-500">*</span>
-              </label>
-              <div className="flex items-center gap-2">
-
-                {currentBalance > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAmount(currentBalance.toString())}
-                    className="text-[11px] text-kf-orange hover:underline font-bold cursor-pointer"
-                  >
-                    Full Due (Rs. {currentBalance.toLocaleString()})
-                  </button>
-                )}
+            {successMsg && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-xl text-xs font-bold flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>{successMsg}</span>
               </div>
-            </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-[#8DA6BC]">
-                Rs.
-              </span>
-              <input
-                id="payment-amount-input"
-                type="number"
-                step="any"
-                min="1"
-                max={currentBalance}
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  setError(null);
-                }}
-                placeholder="0"
-                required
-                className={`w-full h-11 pl-11 pr-4 bg-[#FCF7F0] border rounded-xl text-sm font-bold text-kf-navy focus:bg-white focus:outline-none transition-all ${
-                  isOverBalance
-                    ? "border-red-500 ring-1 ring-red-500"
-                    : "border-[#EADBCA] focus:border-kf-orange focus:ring-1 focus:ring-kf-orange"
-                }`}
-              />
-            </div>
-            {isOverBalance && (
-              <p className="text-[11px] text-red-600 font-semibold mt-1">
-                Amount exceeds customer balance of Rs. {currentBalance.toLocaleString()}.
-              </p>
             )}
-          </div>
 
-          {/* ITEM-WISE PAYMENT ALLOCATION SECTION */}
-          {hasBillItemsOnRecord && (
-            <div className="p-3.5 bg-[#FAF3E8] border border-[#EADBCA] rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-extrabold text-kf-navy block">
-                    Pending Item Payment Allocation
-                  </span>
-                  <span className="text-[11px] text-[#556B82]">
-                    Bill #{bill?.billNo} — Only items with an unpaid balance appear below
-                  </span>
-                </div>
-                {pendingItems.length > 0 && (
-                  <label className="flex items-center gap-1.5 text-xs font-bold text-kf-navy cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useItemAllocation}
-                      onChange={(e) => setUseItemAllocation(e.target.checked)}
-                      className="rounded border-[#EADBCA] text-kf-orange focus:ring-kf-orange cursor-pointer"
-                    />
-                    <span>Enable Allocation</span>
-                  </label>
-                )}
+            {/* Error Feedback */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-start gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Customer Selection */}
+              <div>
+                <label htmlFor="payment-customer-select" className="block text-xs font-bold text-kf-navy mb-1.5">
+                  Select Customer <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="payment-customer-select"
+                  value={customerId}
+                  onChange={(e) => handleCustomerChange(e.target.value)}
+                  required
+                  className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
+                >
+                  <option value="" disabled>Select customer...</option>
+                  {customersWithBalances.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — Rs. {c.currentBalance.toLocaleString()} {c.currentBalance === 0 ? "(Cleared)" : "owed"}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* When all items on bill are fully cleared */}
-              {pendingItems.length === 0 ? (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-800 font-semibold flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>✓ All items on Bill #{bill?.billNo} are fully paid. No pending item dues.</span>
-                </div>
-              ) : useItemAllocation && (
-                <div className="space-y-2 pt-1 border-t border-[#F0E4D4]">
-                  {pendingItems.map((item) => {
-                    const allocVal = itemAllocations[item.id] || "";
-                    const isPartiallyPaid = item.paidAmount > 0;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="p-3 bg-white rounded-xl border border-[#F0E4D4] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-kf-navy text-sm">{item.name}</span>
-                            <span className="text-[11px] font-bold text-[#556B82] bg-[#FAF3E8] px-2 py-0.5 rounded-md border border-[#EADBCA]">
-                              {formatItemQuantityDisplay(item.quantity, item.unit)}
-                            </span>
-                            <span className="text-[11px] text-[#556B82]">
-                              Original price: Rs. {item.unitPrice.toLocaleString()}/{item.unit}
-                            </span>
-                            {isPartiallyPaid && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                Partial (Paid Rs. {item.paidAmount.toLocaleString()})
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-[#556B82] mt-1 flex items-center gap-3 flex-wrap">
-                            <span>
-                              Total: <strong className="text-kf-navy">Rs. {item.lineTotal.toLocaleString()}</strong>
-                            </span>
-                            <span>•</span>
-                            <span>
-                              Paid: <strong className="text-green-700">Rs. {item.paidAmount.toLocaleString()}</strong>
-                            </span>
-                            <span>•</span>
-                            <span>
-                              Outstanding:{" "}
-                              <strong className="text-kf-orange font-black">
-                                Rs. {item.remainingBalance.toLocaleString()}
-                              </strong>
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <div className="relative w-28">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#8DA6BC]">
-                              Rs.
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={item.remainingBalance}
-                              placeholder="0"
-                              value={allocVal}
-                              onChange={(e) => handleItemAllocationChange(item.id, e.target.value)}
-                              className="w-full h-8 pl-7 pr-2 bg-[#FCF8F2] border border-[#EADBCA] rounded-lg text-xs font-bold text-kf-navy focus:bg-white focus:border-kf-orange focus:outline-none"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handlePayDue(item.id, item.remainingBalance)}
-                            className="px-2.5 py-1.5 text-[11px] bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy font-bold rounded-lg cursor-pointer whitespace-nowrap border border-[#EADBCA]"
-                          >
-                            Pay Due (Rs. {item.remainingBalance.toLocaleString()})
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Allocation Reconciliation Summary Bar */}
-                  <div className="p-2.5 bg-white rounded-xl border border-[#F0E4D4] space-y-1 text-xs">
-                    <div className="flex items-center justify-between font-semibold">
-                      <span className="text-[#556B82]">Cash Payment Amount:</span>
-                      <span className="font-extrabold text-kf-navy">
-                        Rs. {numAmount.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between font-semibold">
-                      <span className="text-[#556B82]">Total Allocated to Items:</span>
-                      <span
-                        className={`font-extrabold ${
-                          allocationExceedsPayment ? "text-red-600" : "text-green-700"
-                        }`}
-                      >
-                        Rs. {totalAllocated.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between font-semibold border-t border-[#F0E4D4] pt-1">
-                      <span className="text-[#556B82]">Unallocated Remainder:</span>
-                      <span className="font-extrabold text-kf-orange">
-                        Rs. {unallocatedAmount.toLocaleString()}
-                      </span>
-                    </div>
-
-                    {/* Tariq Specific Verified Helper Notification */}
-                    {customerId === "cust-1" && totalAllocated === 10000 && numAmount === 10000 && (
-                      <div className="mt-1 p-1.5 bg-green-50 border border-green-200 rounded text-[11px] text-green-800 font-semibold">
-                        ✓ Rice (Rs. 4,000) & Dalda oil (Rs. 6,000) will be fully settled. Eggs retains Rs. 5,000 unpaid balance.
-                      </div>
-                    )}
+              {/* Bill Overview Strip */}
+              {bill && (
+                <div className="p-3 bg-[#FAF3E8] border border-[#EADBCA] rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-extrabold text-kf-navy block">
+                      Bill #{bill.billNo}
+                    </span>
+                    <span className="text-[11px] text-[#556B82]">
+                      Total: Rs. {bill.totalAmount.toLocaleString()} • Paid: Rs. {bill.paidAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-[#8DA6BC] uppercase font-bold block">
+                      Outstanding Due
+                    </span>
+                    <span className="font-extrabold text-kf-orange text-sm">
+                      Rs. {bill.remainingBalance.toLocaleString()}
+                    </span>
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Payment Method & Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="payment-method-select" className="block text-xs font-bold text-kf-navy mb-1.5">
-                Payment Mode <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="payment-method-select"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
-              >
-                <option value="Cash">Cash (Shop Counter)</option>
-                <option value="JazzCash">JazzCash</option>
-                <option value="EasyPaisa">EasyPaisa</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-              </select>
-            </div>
+              {/* Amount */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="payment-amount-input" className="text-xs font-bold text-kf-navy">
+                    Payment Amount to Record (PKR) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {currentBalance > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAmount(currentBalance.toString());
+                          setError(null);
+                        }}
+                        className="text-[11px] text-kf-orange hover:underline font-bold cursor-pointer"
+                      >
+                        Full Due (Rs. {currentBalance.toLocaleString()})
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-[#8DA6BC]">
+                    Rs.
+                  </span>
+                  <input
+                    id="payment-amount-input"
+                    type="number"
+                    step="any"
+                    min="1"
+                    max={currentBalance}
+                    value={amount}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="Enter exact payment received..."
+                    required
+                    className={`w-full h-11 pl-11 pr-4 bg-[#FCF7F0] border rounded-xl text-sm font-bold text-kf-navy focus:bg-white focus:outline-none transition-all ${
+                      isOverBalance
+                        ? "border-red-500 ring-1 ring-red-500"
+                        : "border-[#EADBCA] focus:border-kf-orange focus:ring-1 focus:ring-kf-orange"
+                    }`}
+                  />
+                </div>
+                {isOverBalance && (
+                  <p className="text-[11px] text-red-600 font-semibold mt-1">
+                    Amount exceeds customer balance of Rs. {currentBalance.toLocaleString()}.
+                  </p>
+                )}
+              </div>
 
-            <div>
-              <label htmlFor="payment-date-input" className="block text-xs font-bold text-kf-navy mb-1.5">
-                Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="payment-date-input"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
-              />
-            </div>
-          </div>
+              {/* ITEM-WISE PAYMENT ALLOCATION SECTION */}
+              {hasBillItemsOnRecord && (
+                <div className="p-3.5 bg-[#FAF3E8] border border-[#EADBCA] rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-extrabold text-kf-navy block">
+                        Item-Level Payment Allocation
+                      </span>
+                      <span className="text-[11px] text-[#556B82]">
+                        Bill #{bill?.billNo} — Allocate payment to specific items or leave unallocated
+                      </span>
+                    </div>
+                    {pendingItems.length > 0 && (
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-kf-navy cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useItemAllocation}
+                          onChange={(e) => setUseItemAllocation(e.target.checked)}
+                          className="rounded border-[#EADBCA] text-kf-orange focus:ring-kf-orange cursor-pointer"
+                        />
+                        <span>Enable Allocation</span>
+                      </label>
+                    )}
+                  </div>
 
-          {/* Description */}
-          <div>
-            <label htmlFor="payment-desc-input" className="block text-xs font-bold text-kf-navy mb-1.5">
-              Note / Reference (Optional)
-            </label>
-            <input
-              id="payment-desc-input"
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Cash received at counter against Rice & Oil"
-              className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-medium text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
-            />
-          </div>
+                  {/* When all items on bill are fully cleared */}
+                  {pendingItems.length === 0 ? (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-800 font-semibold flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>✓ All items on Bill #{bill?.billNo} are fully paid. No pending item dues.</span>
+                    </div>
+                  ) : useItemAllocation && (
+                    <div className="space-y-2.5 pt-1 border-t border-[#F0E4D4]">
+                      {pendingItems.map((item) => {
+                        const allocVal = itemAllocations[item.id] || "";
+                        const allocNum = parseFloat(allocVal) || 0;
+                        const isPartiallyPaid = item.paidAmount > 0;
+                        const unitPrice = item.unitPrice;
 
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#F0E4D4]">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-kf-navy hover:bg-[#F5ECE1] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isOverBalance || currentBalance <= 0 || allocationExceedsPayment}
-              className="px-5 py-2.5 bg-gradient-to-r from-[#FF6A00] to-[#FF7E1F] hover:from-[#E85E00] hover:to-[#FF6A00] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md shadow-[#FF6A00]/25 transition-all cursor-pointer flex items-center gap-2"
-            >
-              {isSubmitting ? "Recording..." : "Save Payment"}
-            </button>
-          </div>
-        </form>
+                        // Quantity calculations
+                        const previouslyPaidQty =
+                          unitPrice > 0 ? Math.round((item.paidAmount / unitPrice) * 100) / 100 : 0;
+                        const unpaidQty =
+                          unitPrice > 0 ? Math.round((item.remainingBalance / unitPrice) * 100) / 100 : 0;
+
+                        // After current allocation preview
+                        const newlyPaidQty =
+                          unitPrice > 0 ? Math.round((allocNum / unitPrice) * 100) / 100 : 0;
+                        const remainingUnpaidQtyAfter =
+                          unitPrice > 0
+                            ? Math.max(0, Math.round(((item.remainingBalance - allocNum) / unitPrice) * 100) / 100)
+                            : 0;
+                        const remainingBalanceAfter = Math.max(0, item.remainingBalance - allocNum);
+
+                        // Quick buttons: 1 unit, or full remaining
+                        const oneUnitAmt = unitPrice;
+                        const showOneUnitBtn = unpaidQty > 1 && oneUnitAmt <= item.remainingBalance;
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="p-3 bg-white rounded-xl border border-[#F0E4D4] flex flex-col gap-2 text-xs"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-kf-navy text-sm">{item.name}</span>
+                                <span className="text-[11px] font-bold text-[#556B82] bg-[#FAF3E8] px-2 py-0.5 rounded-md border border-[#EADBCA]">
+                                  {formatItemQuantityDisplay(item.quantity, item.unit)}
+                                </span>
+                                <span className="text-[11px] text-[#556B82]">
+                                  @ Rs. {item.unitPrice.toLocaleString()}/{item.unit}
+                                </span>
+                                {isPartiallyPaid && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                    Partially Paid ({previouslyPaidQty} {item.unit} / Rs. {item.paidAmount.toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-[#8DA6BC] uppercase font-bold block">
+                                  Item Due
+                                </span>
+                                <span className="font-extrabold text-kf-orange text-sm">
+                                  Rs. {item.remainingBalance.toLocaleString()} ({unpaidQty} {item.unit} unpaid)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Allocation Input Row */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#F0E4D4]/60">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-kf-navy">Allocate:</span>
+                                <div className="relative w-32">
+                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8DA6BC]">
+                                    Rs.
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={item.remainingBalance}
+                                    step="any"
+                                    placeholder="0"
+                                    value={allocVal}
+                                    onChange={(e) => handleItemAllocationChange(item.id, e.target.value)}
+                                    className="w-full h-8 pl-8 pr-2 bg-[#FCF8F2] border border-[#EADBCA] rounded-lg text-xs font-bold text-kf-navy focus:bg-white focus:border-kf-orange focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Quick Helper Buttons */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {showOneUnitBtn && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAllocateSpecific(item.id, oneUnitAmt)}
+                                    className="px-2 py-1 text-[10px] bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy font-bold rounded-md border border-[#EADBCA] cursor-pointer"
+                                  >
+                                    1 {item.unit} (Rs. {oneUnitAmt.toLocaleString()})
+                                  </button>
+                                )}
+                                {numAmount > 0 && numAmount <= item.remainingBalance && allocNum !== numAmount && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAllocateSpecific(item.id, numAmount)}
+                                    className="px-2 py-1 text-[10px] bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange font-bold rounded-md border border-[#FFD9B3] cursor-pointer"
+                                  >
+                                    Match Rs. {numAmount.toLocaleString()}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAllocateSpecific(item.id, item.remainingBalance)}
+                                  className="px-2 py-1 text-[10px] bg-white hover:bg-[#FAF3E8] text-[#556B82] font-bold rounded-md border border-[#EADBCA] cursor-pointer"
+                                >
+                                  Full Due (Rs. {item.remainingBalance.toLocaleString()})
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Real-time Equivalent Quantity Indicator */}
+                            {allocNum > 0 && (
+                              <div className="p-2 bg-green-50 border border-green-200 rounded-lg text-[11px] text-green-900 flex items-center justify-between">
+                                <span>
+                                  ✓ Paying for: <strong>{newlyPaidQty} {item.unit}</strong> (Rs. {allocNum.toLocaleString()})
+                                </span>
+                                <span>
+                                  Remaining unpaid: <strong>{remainingUnpaidQtyAfter} {item.unit}</strong> (Rs. {remainingBalanceAfter.toLocaleString()})
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Allocation Reconciliation Summary Bar */}
+                      <div className="p-2.5 bg-white rounded-xl border border-[#F0E4D4] space-y-1 text-xs">
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-[#556B82]">Payment Amount:</span>
+                          <span className="font-extrabold text-kf-navy">
+                            Rs. {numAmount.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-[#556B82]">Total Allocated to Items:</span>
+                          <span
+                            className={`font-extrabold ${
+                              allocationExceedsPayment ? "text-red-600" : "text-green-700"
+                            }`}
+                          >
+                            Rs. {totalAllocated.toLocaleString()}
+                          </span>
+                        </div>
+                        {unallocatedAmount > 0 && (
+                          <div className="flex items-center justify-between font-semibold border-t border-[#F0E4D4] pt-1">
+                            <span className="text-[#556B82]">General Bill Payment (Unallocated):</span>
+                            <span className="font-extrabold text-kf-orange">
+                              Rs. {unallocatedAmount.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Live Payment Impact Breakdown Card */}
+              {numAmount > 0 && !isOverBalance && (
+                <div className="p-3.5 bg-[#FAF3E8] border border-[#EADBCA] rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-extrabold text-kf-navy">
+                    <span>Payment Impact Summary:</span>
+                    <span className="text-green-700 text-sm font-black">
+                      - Rs. {numAmount.toLocaleString()} ({paymentMethod})
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-[#EADBCA]/60">
+                    <div>
+                      <span className="text-[#556B82] block">Current Outstanding:</span>
+                      <span className="font-bold text-kf-navy">
+                        Rs. {currentBalance.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#556B82] block">New Outstanding Balance:</span>
+                      <span className="font-bold text-green-700">
+                        Rs. {Math.max(0, currentBalance - numAmount).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  {bill && (
+                    <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-[#EADBCA]/60">
+                      <div>
+                        <span className="text-[#556B82] block">Bill #{bill.billNo} Current Due:</span>
+                        <span className="font-bold text-kf-navy">
+                          Rs. {bill.remainingBalance.toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[#556B82] block">Bill #{bill.billNo} Remaining Due:</span>
+                        <span className="font-bold text-green-700">
+                          Rs. {Math.max(0, bill.remainingBalance - numAmount).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Payment Method & Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="payment-method-select" className="block text-xs font-bold text-kf-navy mb-1.5">
+                    Payment Mode <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="payment-method-select"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
+                  >
+                    <option value="Cash">Cash (Shop Counter)</option>
+                    <option value="JazzCash">JazzCash</option>
+                    <option value="EasyPaisa">EasyPaisa</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="payment-date-input" className="block text-xs font-bold text-kf-navy mb-1.5">
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="payment-date-input"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label htmlFor="payment-desc-input" className="block text-xs font-bold text-kf-navy mb-1.5">
+                  Note / Reference (Optional)
+                </label>
+                <input
+                  id="payment-desc-input"
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g. Cash received at counter"
+                  className="w-full h-11 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-medium text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#F0E4D4]">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-kf-navy hover:bg-[#F5ECE1] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || isOverBalance || currentBalance <= 0 || allocationExceedsPayment || numAmount <= 0}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#FF6A00] to-[#FF7E1F] hover:from-[#E85E00] hover:to-[#FF6A00] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md shadow-[#FF6A00]/25 transition-all cursor-pointer flex items-center gap-2"
+                >
+                  {isSubmitting ? "Saving Payment..." : `Save Payment (Rs. ${numAmount.toLocaleString()})`}
+                </button>
+              </div>
+            </form>
           </>
         )}
       </div>
