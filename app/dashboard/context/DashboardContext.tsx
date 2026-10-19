@@ -1,8 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo, useCallback } from "react";
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
 
-export type TransactionType = "credit" | "payment";
+export type TransactionType = "credit" | "payment" | "adjustment";
 export type ExpenseCategory = "Inventory" | "Rent" | "Utilities" | "Transport" | "Staff" | "Other";
 export type PaymentMethod = "Cash" | "Bank Transfer" | "JazzCash" | "EasyPaisa";
 export type CustomerStatus = "active" | "cleared" | "overdue";
@@ -84,6 +84,7 @@ export interface ItemAdjustment {
   quantityAdjusted: number;
   unit: string;
   unitPrice: number;
+  originalUnitPrice?: number;
   amountAdjusted: number;
   reason: string;
   date: string;
@@ -132,6 +133,7 @@ export interface CustomerWithBalance extends Customer {
   currentBalance: number;
   totalCredit: number;
   totalPaid: number;
+  totalAdjusted?: number;
   lastTransactionDate?: string;
 }
 
@@ -212,6 +214,7 @@ interface DashboardContextType {
     customerId: string;
     enteredItemName: string;
     quantity: number;
+    unitPrice?: number;
     reason: string;
     date?: string;
   }) => { success: boolean; error?: string; adjustment?: ItemAdjustment };
@@ -342,10 +345,9 @@ const INITIAL_CUSTOMERS: Customer[] = [
   },
 ];
 
-// Tariq's original itemized bill records as source of truth
-// Exact amounts: Rice 2kg (Rs. 4,000), Dalda oil 2kg (Rs. 6,000), Eggs 11 pieces (Rs. 5,000)
-// Total = Rs. 15,000.
+// Verified initial store bills as authoritative source of truth for each customer
 const INITIAL_BILLS: CustomerBill[] = [
+  // Tariq Khan (cust-1)
   {
     id: "bill-1001",
     billNo: "BILL-1001",
@@ -396,9 +398,168 @@ const INITIAL_BILLS: CustomerBill[] = [
       },
     ],
   },
+  // Bilal Ahmed (cust-2)
+  {
+    id: "bill-1002",
+    billNo: "REC-1049",
+    customerId: "cust-2",
+    customerName: "Bilal Ahmed (Peshawar Bakers)",
+    date: "2026-10-04",
+    totalAmount: 6200,
+    totalCost: 4836,
+    paidAmount: 3000,
+    remainingBalance: 3200,
+    notes: "Bakery stock: Dry milk powder & baking essentials.",
+    items: [
+      {
+        id: "item-bilal-1",
+        billId: "bill-1002",
+        name: "Dry milk powder",
+        quantity: 4,
+        unit: "kg",
+        unitPrice: 1000,
+        unitCost: 780,
+        lineTotal: 4000,
+        paidAmount: 3000,
+        remainingBalance: 1000,
+      },
+      {
+        id: "item-bilal-2",
+        billId: "bill-1002",
+        name: "Baking flour & yeast",
+        quantity: 11,
+        unit: "packs",
+        unitPrice: 200,
+        unitCost: 156,
+        lineTotal: 2200,
+        paidAmount: 0,
+        remainingBalance: 2200,
+      },
+    ],
+  },
+  // Haji Usman Shinwari (cust-3)
+  {
+    id: "bill-1003",
+    billNo: "REC-1055",
+    customerId: "cust-3",
+    customerName: "Haji Usman Shinwari",
+    date: "2026-10-05",
+    totalAmount: 12000,
+    totalCost: 9360,
+    paidAmount: 6000,
+    remainingBalance: 6000,
+    notes: "Bulk Basmati Rice order.",
+    items: [
+      {
+        id: "item-usman-1",
+        billId: "bill-1003",
+        name: "Basmati Rice (25kg bags)",
+        quantity: 2,
+        unit: "bags",
+        unitPrice: 6000,
+        unitCost: 4680,
+        lineTotal: 12000,
+        paidAmount: 6000,
+        remainingBalance: 6000,
+      },
+    ],
+  },
+  // Rashid Mehmood (cust-4)
+  {
+    id: "bill-1004",
+    billNo: "REC-1061",
+    customerId: "cust-4",
+    customerName: "Rashid Mehmood (City Pharmacy)",
+    date: "2026-10-06",
+    totalAmount: 3800,
+    totalCost: 2964,
+    paidAmount: 2000,
+    remainingBalance: 1800,
+    notes: "Mineral water cartons wholesale.",
+    items: [
+      {
+        id: "item-rashid-1",
+        billId: "bill-1004",
+        name: "Mineral Water (Cartons)",
+        quantity: 19,
+        unit: "cartons",
+        unitPrice: 200,
+        unitCost: 156,
+        lineTotal: 3800,
+        paidAmount: 2000,
+        remainingBalance: 1800,
+      },
+    ],
+  },
+  // Zubair Afridi (cust-5)
+  {
+    id: "bill-1005",
+    billNo: "REC-1068",
+    customerId: "cust-5",
+    customerName: "Zubair Afridi (Gul Super Store)",
+    date: "2026-10-07",
+    totalAmount: 9000,
+    totalCost: 7020,
+    paidAmount: 9000,
+    remainingBalance: 0,
+    notes: "Cooking oil bulk carton.",
+    items: [
+      {
+        id: "item-zubair-1",
+        billId: "bill-1005",
+        name: "Cooking Oil",
+        quantity: 15,
+        unit: "liters",
+        unitPrice: 600,
+        unitCost: 468,
+        lineTotal: 9000,
+        paidAmount: 9000,
+        remainingBalance: 0,
+      },
+    ],
+  },
+  // Imran Shah (cust-6)
+  {
+    id: "bill-1006",
+    billNo: "REC-1075",
+    customerId: "cust-6",
+    customerName: "Imran Shah",
+    date: "2026-10-09",
+    totalAmount: 4500,
+    totalCost: 3510,
+    paidAmount: 1150,
+    remainingBalance: 3350,
+    notes: "Pulses and wheat flour staple items.",
+    items: [
+      {
+        id: "item-imran-1",
+        billId: "bill-1006",
+        name: "Pulses (Daal Chana)",
+        quantity: 10,
+        unit: "kg",
+        unitPrice: 320,
+        unitCost: 250,
+        lineTotal: 3200,
+        paidAmount: 1150,
+        remainingBalance: 2050,
+      },
+      {
+        id: "item-imran-2",
+        billId: "bill-1006",
+        name: "Wheat Flour (Atta)",
+        quantity: 10,
+        unit: "kg",
+        unitPrice: 130,
+        unitCost: 101,
+        lineTotal: 1300,
+        paidAmount: 0,
+        remainingBalance: 1300,
+      },
+    ],
+  },
 ];
 
-// Initial Transactions: Tariq has his original Rs. 15,000 credit bill recorded on 2026-10-01.
+// Initial Transactions linked with bills
 const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
   // Tariq Khan: Original Bill #BILL-1001 of Rs. 15,000
   {
@@ -422,6 +583,7 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     date: "2026-10-04",
     description: "Dry milk powder & baking ingredients",
     receiptNo: "REC-1049",
+    billId: "bill-1002",
   },
   {
     id: "tx-5",
@@ -430,8 +592,10 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "payment",
     amount: 3000,
     date: "2026-10-11",
-    description: "Bank transfer via Allied Bank",
+    description: "Bank transfer via Allied Bank [Allocated: Dry milk powder: Rs. 3,000]",
     paymentMethod: "Bank Transfer",
+    billId: "bill-1002",
+    itemAllocations: [{ itemId: "item-bilal-1", itemName: "Dry milk powder", allocatedAmount: 3000 }],
   },
   // Haji Usman Shinwari (Opening 20,000)
   {
@@ -441,8 +605,9 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "credit",
     amount: 12000,
     date: "2026-10-05",
-    description: "Bulk Basmati Rice (10 bags 25kg)",
+    description: "Bulk Basmati Rice (2 bags 25kg)",
     receiptNo: "REC-1055",
+    billId: "bill-1003",
   },
   {
     id: "tx-7",
@@ -451,8 +616,10 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "payment",
     amount: 6000,
     date: "2026-10-12",
-    description: "Direct cash payment via driver",
+    description: "Direct cash payment via driver [Allocated: Basmati Rice (25kg bags): Rs. 6,000]",
     paymentMethod: "Cash",
+    billId: "bill-1003",
+    itemAllocations: [{ itemId: "item-usman-1", itemName: "Basmati Rice (25kg bags)", allocatedAmount: 6000 }],
   },
   // Rashid Mehmood (Opening 3,000)
   {
@@ -464,6 +631,7 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     date: "2026-10-06",
     description: "Beverages and mineral water cartons",
     receiptNo: "REC-1061",
+    billId: "bill-1004",
   },
   {
     id: "tx-9",
@@ -472,8 +640,10 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "payment",
     amount: 2000,
     date: "2026-10-15",
-    description: "JazzCash payment received",
+    description: "JazzCash payment received [Allocated: Mineral Water (Cartons): Rs. 2,000]",
     paymentMethod: "JazzCash",
+    billId: "bill-1004",
+    itemAllocations: [{ itemId: "item-rashid-1", itemName: "Mineral Water (Cartons)", allocatedAmount: 2000 }],
   },
   // Zubair Afridi (Opening 0, purchased 9,000, fully paid 9,000)
   {
@@ -485,6 +655,7 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     date: "2026-10-07",
     description: "Cooking oil & spices carton",
     receiptNo: "REC-1068",
+    billId: "bill-1005",
   },
   {
     id: "tx-11",
@@ -493,8 +664,10 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "payment",
     amount: 9000,
     date: "2026-10-16",
-    description: "Full clearance via EasyPaisa",
+    description: "Full clearance via EasyPaisa [Allocated: Cooking Oil: Rs. 9,000]",
     paymentMethod: "EasyPaisa",
+    billId: "bill-1005",
+    itemAllocations: [{ itemId: "item-zubair-1", itemName: "Cooking Oil", allocatedAmount: 9000 }],
   },
   // Imran Shah (Opening 8,000)
   {
@@ -506,6 +679,7 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     date: "2026-10-09",
     description: "Pulses (Daal Mash, Daal Chana, Chawal)",
     receiptNo: "REC-1075",
+    billId: "bill-1006",
   },
   {
     id: "tx-13",
@@ -514,8 +688,10 @@ const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
     type: "payment",
     amount: 1150,
     date: "2026-10-17",
-    description: "Cash payment at shop",
+    description: "Cash payment at shop [Allocated: Pulses (Daal Chana): Rs. 1,150]",
     paymentMethod: "Cash",
+    billId: "bill-1006",
+    itemAllocations: [{ itemId: "item-imran-1", itemName: "Pulses (Daal Chana)", allocatedAmount: 1150 }],
   },
 ];
 
@@ -602,6 +778,8 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
+const STORAGE_KEY = "KHATAFLOW_STORAGE_V1";
+
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => STANDARD_PRODUCTS);
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
@@ -610,6 +788,55 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<LedgerTransaction[]>(INITIAL_TRANSACTIONS);
   const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Restore persistent state from localStorage on client mount
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.version === 1) {
+            if (Array.isArray(parsed.customers) && parsed.customers.length > 0) setCustomers(parsed.customers);
+            if (Array.isArray(parsed.bills)) setBills(parsed.bills);
+            if (Array.isArray(parsed.adjustments)) setAdjustments(parsed.adjustments);
+            if (Array.isArray(parsed.transactions) && parsed.transactions.length > 0) setTransactions(parsed.transactions);
+            if (Array.isArray(parsed.expenses) && parsed.expenses.length > 0) setExpenses(parsed.expenses);
+            if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
+            if (Array.isArray(parsed.products) && parsed.products.length > 0) setProducts(parsed.products);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not hydrate KhataFlow from storage:", err);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // Save persistent state whenever data changes
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      if (typeof window !== "undefined") {
+        const payload = {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          customers,
+          bills,
+          adjustments,
+          transactions,
+          expenses,
+          notifications,
+          products,
+        };
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      }
+    } catch (err) {
+      console.warn("Could not save KhataFlow to storage:", err);
+    }
+  }, [isHydrated, customers, bills, adjustments, transactions, expenses, notifications, products]);
 
   // Modal control
   const [activeModal, setActiveModal] = useState<"payment" | "credit" | "customer" | "expense" | "item-adjust" | null>(null);
@@ -632,6 +859,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
       let totalCredit = 0;
       let totalPaid = 0;
+      let totalAdjusted = 0;
       let lastDate = c.createdAt;
 
       custTxs.forEach((t) => {
@@ -639,13 +867,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           totalCredit += t.amount;
         } else if (t.type === "payment") {
           totalPaid += t.amount;
+        } else if (t.type === "adjustment") {
+          totalAdjusted += t.amount;
         }
         if (t.date > lastDate) {
           lastDate = t.date;
         }
       });
 
-      const currentBalance = c.openingBalance + totalCredit - totalPaid;
+      const currentBalance = c.openingBalance + totalCredit - totalPaid - totalAdjusted;
 
       // Update status dynamically
       let dynamicStatus = c.status;
@@ -661,6 +891,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         currentBalance: Math.max(0, currentBalance),
         totalCredit,
         totalPaid,
+        totalAdjusted,
         lastTransactionDate: custTxs.length > 0 ? lastDate : undefined,
       };
     });
@@ -779,13 +1010,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         (it) => it.name.trim().toLowerCase() === cleanEnteredName
       );
 
-      const customerShortName = customer.name.split(" ")[0]; // "Tariq"
-
       if (!matched) {
         const originalItemList = bill.items.map((i) => i.name).join(", ");
         return {
           isValid: false,
-          errorMessage: `This item does not match ${customerShortName}'s original bill. The original bill contains ${originalItemList}, not ${enteredItemName.trim()}. Please review the original ledger.`,
+          errorMessage: `This item does not match ${customer.name}'s original bill. The original bill contains ${originalItemList}, not ${enteredItemName.trim()}. Please review the original ledger.`,
           suggestedItems: bill.items.map((i) => `${i.name} (${i.quantity} ${i.unit})`),
         };
       }
@@ -839,6 +1068,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       customerId: string;
       enteredItemName: string;
       quantity: number;
+      unitPrice?: number;
       reason: string;
       date?: string;
     }) => {
@@ -859,8 +1089,16 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const customer = customers.find((c) => c.id === data.customerId)!;
       const bill = bills.find((b) => b.customerId === data.customerId)!;
 
-      // Calculate adjustment amount using the original recorded unit price
-      const calculatedAmount = Math.round(data.quantity * matchedItem.unitPrice);
+      // Allow correcting the historical unit price (e.g. from Rs. 454.55 to Rs. 500)
+      const effectiveUnitPrice =
+        data.unitPrice !== undefined && Number(data.unitPrice) > 0
+          ? Number(data.unitPrice)
+          : matchedItem.unitPrice;
+
+      const priceWasCorrected = Math.abs(effectiveUnitPrice - matchedItem.unitPrice) > 0.001;
+
+      // Calculate adjustment amount using the effective unit price
+      const calculatedAmount = Math.round(data.quantity * effectiveUnitPrice);
 
       const newAdjustment: ItemAdjustment = {
         id: `adj-${Date.now()}`,
@@ -871,7 +1109,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         enteredItemName: data.enteredItemName.trim(),
         quantityAdjusted: data.quantity,
         unit: matchedItem.unit,
-        unitPrice: matchedItem.unitPrice,
+        unitPrice: effectiveUnitPrice,
+        originalUnitPrice: matchedItem.unitPrice,
         amountAdjusted: calculatedAmount,
         reason: data.reason.trim(),
         date: data.date || new Date().toISOString().split("T")[0],
@@ -884,11 +1123,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           const updatedItems = b.items.map((it) => {
             if (it.id !== matchedItem.id) return it;
             const newQty = Math.max(0, it.quantity - data.quantity);
-            const newLineTotal = Math.round(newQty * it.unitPrice);
+            // If the unit price was corrected, update unitPrice for this item on the bill
+            const itemUnitPrice = priceWasCorrected ? effectiveUnitPrice : it.unitPrice;
+            const newLineTotal = Math.round(newQty * itemUnitPrice);
             const newRemaining = Math.max(0, newLineTotal - it.paidAmount);
             return {
               ...it,
               quantity: newQty,
+              unitPrice: itemUnitPrice,
               lineTotal: newLineTotal,
               remainingBalance: newRemaining,
             };
@@ -907,14 +1149,18 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       );
 
       // Record adjustment in transactions to maintain mathematical consistency
+      const priceDetailNote = priceWasCorrected
+        ? ` (Rate corrected from Rs. ${matchedItem.unitPrice.toLocaleString()}/${matchedItem.unit} to Rs. ${effectiveUnitPrice.toLocaleString()}/${matchedItem.unit})`
+        : "";
+
       const adjustmentTx: LedgerTransaction = {
         id: `tx-adj-${Date.now()}`,
         customerId: customer.id,
         customerName: customer.name,
-        type: "payment", // credit reduction
+        type: "adjustment", // Dedicated adjustment type (NOT a cash payment)
         amount: calculatedAmount,
         date: newAdjustment.date,
-        description: `Item Adjustment: Return/correction of ${data.quantity} ${matchedItem.unit} ${matchedItem.name} @ Rs. ${matchedItem.unitPrice.toLocaleString()}/${matchedItem.unit} (${data.reason})`,
+        description: `Item Adjustment: Return/correction of ${data.quantity} ${matchedItem.unit} ${matchedItem.name} @ Rs. ${effectiveUnitPrice.toLocaleString()}/${matchedItem.unit}${priceDetailNote} (${data.reason})`,
         receiptNo: `ADJ-${bill.billNo}`,
         billId: bill.id,
       };
@@ -926,7 +1172,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const newNotif: NotificationItem = {
         id: `notif-${Date.now()}`,
         title: "Item Adjustment Applied",
-        message: `${matchedItem.name} (${data.quantity} ${matchedItem.unit}) adjusted on ${customer.name}'s bill #BILL-1001 for Rs. ${calculatedAmount.toLocaleString()}.`,
+        message: `${matchedItem.name} (${data.quantity} ${matchedItem.unit}) adjusted on ${customer.name}'s bill #${bill.billNo} for Rs. ${calculatedAmount.toLocaleString()}.${priceWasCorrected ? ` Rate: Rs. ${effectiveUnitPrice}.` : ""}`,
         time: "Just now",
         type: "info",
         read: false,
@@ -1606,6 +1852,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetDemoData = useCallback(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn("Could not clear localStorage:", e);
+    }
     setProducts(STANDARD_PRODUCTS);
     setCustomers(INITIAL_CUSTOMERS);
     setBills(INITIAL_BILLS);

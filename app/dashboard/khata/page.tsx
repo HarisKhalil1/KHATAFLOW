@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useDashboard } from "../context/DashboardContext";
 
 export default function DigitalKhataPage() {
@@ -36,6 +37,22 @@ export default function DigitalKhataPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
+      {/* Navigation Breadcrumb */}
+      <div className="flex items-center justify-between">
+        <Link
+          href="/dashboard/customers"
+          className="text-xs font-bold text-kf-orange hover:text-[#E85E00] flex items-center gap-1.5 transition-colors no-underline"
+        >
+          <span>← Back to Customers &amp; Khata</span>
+        </Link>
+        <Link
+          href="/dashboard/records"
+          className="text-xs font-bold text-[#556B82] hover:text-kf-navy flex items-center gap-1.5 transition-colors no-underline"
+        >
+          <span>View All Records Journal →</span>
+        </Link>
+      </div>
+
       {/* Customer Selector & Quick Switcher */}
       <div className="bg-white p-5 rounded-2xl border border-[#EADBCA] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex-1 max-w-md">
@@ -297,7 +314,15 @@ export default function DigitalKhataPage() {
                         {tx.type === "credit" ? `+Rs. ${tx.amount.toLocaleString()}` : "—"}
                       </td>
                       <td className="py-3 px-3 text-right font-extrabold text-green-600 tabular-nums">
-                        {tx.type === "payment" ? `-Rs. ${tx.amount.toLocaleString()}` : "—"}
+                        {tx.type === "payment" ? (
+                          `-Rs. ${tx.amount.toLocaleString()}`
+                        ) : tx.type === "adjustment" ? (
+                          <span className="text-amber-700 font-bold" title="Item adjustment / return">
+                            -Rs. {tx.amount.toLocaleString()} <span className="text-[10px] uppercase font-bold">(Adj)</span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="py-3 px-3 text-right font-extrabold text-kf-navy tabular-nums">
                         Rs. {tx.runningBalance.toLocaleString()}

@@ -357,10 +357,10 @@ export default function DashboardOverviewPage() {
               <p className="text-xs text-[#556B82]">Latest credit and payment events</p>
             </div>
             <Link
-              href="/dashboard/khata"
+              href="/dashboard/records"
               className="text-xs font-bold text-kf-orange hover:text-[#E85E00] flex items-center gap-1 no-underline"
             >
-              <span>View All Khata</span>
+              <span>View All Records</span>
               <span>→</span>
             </Link>
           </div>
@@ -376,10 +376,12 @@ export default function DashboardOverviewPage() {
                     className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
                       tx.type === "credit"
                         ? "bg-orange-50 text-kf-orange"
+                        : tx.type === "adjustment"
+                        ? "bg-amber-50 text-amber-700"
                         : "bg-green-50 text-green-600"
                     }`}
                   >
-                    {tx.type === "credit" ? "↑" : "↓"}
+                    {tx.type === "credit" ? "↑" : tx.type === "adjustment" ? "⚖️" : "↓"}
                   </div>
                   <div className="min-w-0">
                     <button
@@ -396,7 +398,11 @@ export default function DashboardOverviewPage() {
                 <div className="text-right flex-shrink-0">
                   <div
                     className={`font-extrabold tabular-nums ${
-                      tx.type === "credit" ? "text-kf-orange" : "text-green-600"
+                      tx.type === "credit"
+                        ? "text-kf-orange"
+                        : tx.type === "adjustment"
+                        ? "text-amber-700"
+                        : "text-green-600"
                     }`}
                   >
                     {tx.type === "credit" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}

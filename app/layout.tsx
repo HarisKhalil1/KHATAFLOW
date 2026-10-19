@@ -31,6 +31,7 @@ export const metadata: Metadata = {
       "Turn scattered business records into one simple digital workspace.",
     type: "website",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

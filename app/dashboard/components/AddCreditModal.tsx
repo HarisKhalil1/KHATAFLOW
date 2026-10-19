@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { useDashboard } from "../context/DashboardContext";
+import WhatsAppShareModal from "./WhatsAppShareModal";
+import { generateBillReceiptText } from "../utils/whatsapp";
 
 interface PurchaseRow {
   id: string;
@@ -51,6 +53,13 @@ export default function AddCreditModal() {
   const [newProdName, setNewProdName] = useState("");
   const [newProdUnit, setNewProdUnit] = useState("pieces");
   const [newProdRate, setNewProdRate] = useState("");
+  const [creditRecorded, setCreditRecorded] = useState(false);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [savedBillData, setSavedBillData] = useState<{
+    billNo: string;
+    totalAmount: number;
+    items: Array<{ name: string; quantity: number; unit: string; unitPrice: number; lineTotal: number }>;
+  } | null>(null);
 
   // Structured Items state
   const [items, setItems] = useState<PurchaseRow[]>([
@@ -347,9 +356,22 @@ export default function AddCreditModal() {
       setSuccessMsg(
         `Rs. ${grandTotal.toLocaleString()} credit with ${items.length} item(s) successfully recorded for ${selectedCustomer?.name}!`
       );
-      setTimeout(() => {
-        closeModal();
-      }, 700);
+      setSavedBillData({
+        billNo: result.transaction?.receiptNo || receiptNo.trim() || "NEW",
+        totalAmount: grandTotal,
+        items: items.map((it) => {
+          const q = parseFloat(it.quantity) || 0;
+          const p = parseFloat(it.unitPrice) || 0;
+          return {
+            name: it.name.trim(),
+            quantity: q,
+            unit: it.unit.trim(),
+            unitPrice: p,
+            lineTotal: Math.round(q * p),
+          };
+        }),
+      });
+      setCreditRecorded(true);
     }
   };
 
@@ -389,7 +411,71 @@ export default function AddCreditModal() {
           </button>
         </div>
 
-        {/* Success Feedback */}
+        {creditRecorded ? (
+          <div className="py-6 text-center space-y-4">
+            <div className="w-14 h-14 bg-orange-100 text-kf-orange rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+              ✓
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-kf-navy">Udhaar Credit Added Successfully</h3>
+              <p className="text-xs text-[#556B82] mt-1 max-w-sm mx-auto">
+                Rs. {grandTotal.toLocaleString()} credit ({items.length} items) added to <strong>{selectedCustomer?.name}</strong>&apos;s ledger.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowWhatsApp(true)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>💬 Send WhatsApp Bill</span>
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy border border-[#EADBCA] text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+
+            {savedBillData && (
+              <WhatsAppShareModal
+                isOpen={showWhatsApp}
+                onClose={() => {
+                  setShowWhatsApp(false);
+                  closeModal();
+                }}
+                customerName={selectedCustomer?.name || ""}
+                customerPhone={selectedCustomer?.phone || ""}
+                title="Send Purchase Bill on WhatsApp"
+                initialMessageEn={generateBillReceiptText({
+                  customerName: selectedCustomer?.name || "",
+                  billNo: savedBillData.billNo,
+                  date,
+                  items: savedBillData.items,
+                  totalAmount: savedBillData.totalAmount,
+                  paidAmount: 0,
+                  remainingBalance: currentBalance + savedBillData.totalAmount,
+                  lang: "en",
+                })}
+                initialMessageUr={generateBillReceiptText({
+                  customerName: selectedCustomer?.name || "",
+                  billNo: savedBillData.billNo,
+                  date,
+                  items: savedBillData.items,
+                  totalAmount: savedBillData.totalAmount,
+                  paidAmount: 0,
+                  remainingBalance: currentBalance + savedBillData.totalAmount,
+                  lang: "ur",
+                })}
+              />
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Success Feedback */}
         {successMsg && (
           <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-xl text-xs font-bold flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -912,6 +998,8 @@ export default function AddCreditModal() {
             </button>
           </div>
         </form>
+          </>
+        )}
       </div>
     </div>
   );

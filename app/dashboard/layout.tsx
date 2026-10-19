@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { LanguageProvider } from "../context/LanguageContext";
 import { DashboardProvider, useDashboard } from "./context/DashboardContext";
 import Sidebar from "./components/Sidebar";
 import TopHeader from "./components/TopHeader";
@@ -29,8 +30,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <DashboardProvider>
-      <div className="min-h-screen bg-[#FAF3E8] flex text-kf-navy antialiased selection:bg-[#FFE0CC]">
+    <LanguageProvider>
+      <DashboardProvider>
+        <div className="min-h-screen bg-[#FAF3E8] flex text-kf-navy antialiased selection:bg-[#FFE0CC]">
         {/* Desktop Sidebar */}
         <div className="hidden lg:block">
           <Sidebar />
@@ -53,5 +55,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <DashboardModals />
       </div>
     </DashboardProvider>
+  </LanguageProvider>
   );
 }

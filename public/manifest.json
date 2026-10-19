@@ -1,0 +1,20 @@
+{
+  "name": "KhataFlow — Shop Khata & Udhaar SaaS",
+  "short_name": "KhataFlow",
+  "description": "Simple, reliable, bilingual shop-management system for local Pakistani merchants.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF3E8",
+  "theme_color": "#0F283E",
+  "categories": ["business", "finance", "productivity"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/khataflow-shop.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

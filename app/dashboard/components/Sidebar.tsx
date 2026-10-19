@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDashboard } from "../context/DashboardContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 interface NavItem {
   name: string;
@@ -20,13 +21,14 @@ interface NavSection {
 export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
   const pathname = usePathname();
   const { openModal } = useDashboard();
+  const { lang, t } = useLanguage();
 
   const navSections: NavSection[] = [
     {
-      title: "Main Menu",
+      title: lang === "ur" ? "مین مینو" : "Main Menu",
       items: [
         {
-          name: "Dashboard",
+          name: t.dashboard.menu.dashboard,
           href: "/dashboard",
           icon: (active) => (
             <svg
@@ -47,7 +49,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
           ),
         },
         {
-          name: "Customers",
+          name: t.dashboard.menu.customersAndKhata,
           href: "/dashboard/customers",
           icon: (active) => (
             <svg
@@ -67,9 +69,14 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
             </svg>
           ),
         },
+      ],
+    },
+    {
+      title: lang === "ur" ? "کاروباری امور" : "Operations",
+      items: [
         {
-          name: "Digital Khata",
-          href: "/dashboard/khata",
+          name: t.dashboard.menu.allRecords,
+          href: "/dashboard/records",
           icon: (active) => (
             <svg
               width="18"
@@ -83,17 +90,13 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
             >
               <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
               <path d="M8 7h6" />
-              <path d="M8 11h4" />
+              <path d="M8 11h6" />
+              <path d="M8 15h4" />
             </svg>
           ),
         },
-      ],
-    },
-    {
-      title: "Operations",
-      items: [
         {
-          name: "Payments",
+          name: t.dashboard.menu.payments,
           href: "/dashboard/payments",
           icon: (active) => (
             <svg
@@ -112,7 +115,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
           ),
         },
         {
-          name: "Expenses",
+          name: t.dashboard.menu.expenses,
           href: "/dashboard/expenses",
           icon: (active) => (
             <svg
@@ -130,7 +133,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
           ),
         },
         {
-          name: "Reports",
+          name: t.dashboard.menu.reports,
           href: "/dashboard/reports",
           icon: (active) => (
             <svg
@@ -151,10 +154,10 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
       ],
     },
     {
-      title: "Preferences",
+      title: lang === "ur" ? "ترجیحات" : "Preferences",
       items: [
         {
-          name: "Settings",
+          name: t.dashboard.menu.settings,
           href: "/dashboard/settings",
           icon: (active) => (
             <svg
@@ -226,7 +229,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          <span>Record Payment</span>
+          <span>{t.dashboard.actions.recordPayment}</span>
         </button>
       </div>
 
@@ -238,7 +241,9 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
               {section.title}
             </div>
             {section.items.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive =
+                pathname === item.href ||
+                (item.href === "/dashboard/customers" && pathname.startsWith("/dashboard/khata"));
               return (
                 <Link
                   key={item.name}

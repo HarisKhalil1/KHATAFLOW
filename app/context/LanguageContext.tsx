@@ -4,6 +4,63 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 export type Language = "en" | "ur";
 
+export interface DashboardTranslations {
+  menu: {
+    dashboard: string;
+    customersAndKhata: string;
+    allRecords: string;
+    payments: string;
+    expenses: string;
+    reports: string;
+    settings: string;
+  };
+  actions: {
+    newEntry: string;
+    recordPayment: string;
+    giveCredit: string;
+    adjustItem: string;
+    addCustomer: string;
+    logExpense: string;
+    exportCsv: string;
+    print: string;
+    cancel: string;
+    save: string;
+    apply: string;
+    viewLedger: string;
+    receive: string;
+  };
+  kpis: {
+    outstandingUdhaar: string;
+    cashIn: string;
+    monthlySales: string;
+    netCashflow: string;
+    activeDebtors: string;
+    clearedAccounts: string;
+    shopExpenses: string;
+    itemAdjustments: string;
+  };
+  common: {
+    customer: string;
+    amount: string;
+    date: string;
+    status: string;
+    description: string;
+    reason: string;
+    paymentMethod: string;
+    receiptNo: string;
+    all: string;
+    withUdhaar: string;
+    cleared: string;
+    searchPlaceholder: string;
+    recentTransactions: string;
+    topDebtors: string;
+    viewAllRecords: string;
+    viewAllKhata: string;
+    pkr: string;
+    peshawar: string;
+  };
+}
+
 export interface Translations {
   nav: {
     home: string;
@@ -84,6 +141,7 @@ export interface Translations {
     copyright: string;
     techBar: string;
   };
+  dashboard: DashboardTranslations;
 }
 
 const translations: Record<Language, Translations> = {
@@ -149,45 +207,44 @@ const translations: Record<Language, Translations> = {
         {
           title: "Payments & Credit",
           description:
-            "Record credit entries and received payments easily. Track outstanding balances in real time.",
+            "Record cash received, partial payments, and new credit with timestamps and receipt numbers.",
         },
         {
-          title: "Expense Tracking",
+          title: "Expense Tracker",
           description:
-            "Log and categorize all your business expenses. Know exactly where your money goes each month.",
+            "Log your daily shop expenses — rent, electricity, transport, supplies — to know your true profit.",
         },
         {
-          title: "Reports & Analytics",
+          title: "Business Reports",
           description:
-            "Get clear financial reports — total sales, expenses, outstanding amounts, and business growth trends.",
+            "Get clear daily, weekly, and monthly summaries of your sales, collections, and outstanding balance.",
         },
         {
-          title: "Shop Dashboard",
+          title: "Mobile First & Bilingual",
           description:
-            "One dashboard to see everything — customers, khata, payments, expenses, and today's activity summary.",
+            "Works smoothly on any smartphone. Fully accessible in both English and Urdu with simple language.",
         },
       ],
     },
     about: {
       badge: "About KhataFlow",
-      titleStart: "Built for shopkeepers, ",
-      titleHighlight: "by people who understand",
-      titleEnd: " local business",
-      p1: "KhataFlow was born from a simple observation — most small shopkeepers in Peshawar still manage their businesses with handwritten registers, scattered notes, and memory. This works until it doesn't.",
-      p2: "We're building KhataFlow to give every dukandaar a simple digital workspace that replaces the chaos of paper khatas with organized, searchable, and secure digital records.",
-      p3: "No complicated software. No expensive subscriptions. Just the tools a shopkeeper actually needs — customers, khata, payments, expenses, and clear reports.",
+      titleStart: "Built for local shops in ",
+      titleHighlight: "Peshawar",
+      titleEnd: ", ready for every small business",
+      p1: "KhataFlow was born from a simple observation: thousands of small shops in Pakistan still rely on paper registers and loose notebooks to manage customer credit (udhaar), daily payments, and shop expenses. These traditional methods often lead to lost records, calculation errors, delayed payments, and unnecessary misunderstandings with loyal customers.",
+      p2: "We built KhataFlow to change that. Designed from the ground up for shop owners who may not be tech-savvy, KhataFlow provides an intuitive, reliable digital khata system that works on any smartphone, tablet, or computer. With bilingual support in Urdu and English, clear visual indicators, and simple workflows, anyone can start managing their shop like a pro within minutes.",
+      p3: "Based in Peshawar, Khyber Pakhtunkhwa, our mission is to empower local merchants with modern digital tools that save time, reduce stress, and help their businesses thrive.",
       startFree: "Start Free",
-      viewFeatures: "View Features →",
+      viewFeatures: "View Features",
       highlights: [
-        { stat: "100%", label: "Free for Small Shops" },
-        { stat: "Mobile", label: "First Design" },
-        { stat: "Bilingual", label: "English & Urdu" },
-        { stat: "Secure", label: "Data Protection" },
+        { stat: "100%", label: "Free for demo" },
+        { stat: "2", label: "Languages (EN / UR)" },
+        { stat: "0", label: "Math Errors" },
       ],
     },
     footer: {
-      tagline1: "Simple. Secure. Powerful.",
-      tagline2: "The digital workspace for small shopkeepers.",
+      tagline1: "Simple, reliable shop-management SaaS",
+      tagline2: "Built for local merchants in Peshawar and across Pakistan.",
       productTitle: "Product",
       supportTitle: "Support",
       builtWithTitle: "Built With",
@@ -202,6 +259,62 @@ const translations: Record<Language, Translations> = {
       copyright: "© 2026 KhataFlow • Simple. Secure. Powerful.",
       techBar:
         "Built with Next.js • Supabase • PostgreSQL • Tailwind CSS • React Query • Vercel",
+    },
+    dashboard: {
+      menu: {
+        dashboard: "Dashboard",
+        customersAndKhata: "Customers & Khata",
+        allRecords: "All Records",
+        payments: "Payments",
+        expenses: "Expenses",
+        reports: "Reports",
+        settings: "Settings",
+      },
+      actions: {
+        newEntry: "New Entry",
+        recordPayment: "Record Payment",
+        giveCredit: "Give Credit",
+        adjustItem: "Adjust Item",
+        addCustomer: "Add Customer",
+        logExpense: "Log Expense",
+        exportCsv: "Export CSV",
+        print: "Print",
+        cancel: "Cancel",
+        save: "Save",
+        apply: "Apply",
+        viewLedger: "Khata Ledger",
+        receive: "Receive",
+      },
+      kpis: {
+        outstandingUdhaar: "Total Outstanding Udhaar",
+        cashIn: "Cash Received",
+        monthlySales: "Monthly Sales Volume",
+        netCashflow: "Net Cashflow",
+        activeDebtors: "Active Debtors",
+        clearedAccounts: "Cleared Accounts",
+        shopExpenses: "Shop Expenses",
+        itemAdjustments: "Item Adjustments",
+      },
+      common: {
+        customer: "Customer",
+        amount: "Amount",
+        date: "Date",
+        status: "Status",
+        description: "Description",
+        reason: "Reason",
+        paymentMethod: "Payment Method",
+        receiptNo: "Receipt No",
+        all: "All",
+        withUdhaar: "With Udhaar",
+        cleared: "Cleared",
+        searchPlaceholder: "Search by customer name, phone, or location...",
+        recentTransactions: "Recent Transactions",
+        topDebtors: "Top Udhaar Balances",
+        viewAllRecords: "View All Records",
+        viewAllKhata: "View All Khata",
+        pkr: "Rs.",
+        peshawar: "Peshawar",
+      },
     },
   },
   ur: {
@@ -240,73 +353,72 @@ const translations: Record<Language, Translations> = {
       noAccount: "اکاؤنٹ موجود نہیں ہے؟",
       contactAdmin: "ایڈمن سے رابطہ کریں",
       demoNotification: (role, email) =>
-        `ڈیمو: بطور ${role === "shop-owner" ? "دکاندار" : "سپر ایڈمن"} لاگ ان ہوگئے (${email || "you@shop.com"})`,
+        `ڈیمو: لاگ ان بطور ${role === "shop-owner" ? "دکاندار" : "سپر ایڈمن"} (${email || "you@shop.com"})`,
       contactNotification:
-        "نئی دکان کا اکاؤنٹ بنانے کے لیے براہ کرم اپنے سسٹم ایڈمن سے رابطہ کریں۔",
-      forgotNotification: "پاس ورڈ ری سیٹ کی سہولت فیز 1B میں دستیاب ہوگی۔",
+        "نیا دکان اکاؤنٹ بنانے کے لیے براہ کرم اپنے سسٹم ایڈمن سے رابطہ کریں۔",
+      forgotNotification: "پاس ورڈ دوبارہ ترتیب دینے کی سہولت فیز 1B میں دستیاب ہوگی۔",
     },
     features: {
       badge: "اہم خصوصیات",
       title: "آپ کی دکان کی تمام ضروریات، ",
       titleHighlight: "ایک ہی جگہ",
       subtitle:
-        "کھاتہ فلو آپ کے روزمرہ کے کاروباری معاملات کو یکجا کرتا ہے — ترقی کے خواہشمند دکانداروں کے لیے سادہ اور مفید ٹولز۔",
+        "کھاتہ فلو آپ کے روزمرہ کے تمام کاروباری کاموں کو یکجا کرتا ہے — سادہ اور آسان ٹولز جو دکانداروں کی ترقی کے لیے بنائے گئے ہیں۔",
       cards: [
         {
-          title: "کسٹمر مینجمنٹ",
+          title: "گاہکوں کا انتظام",
           description:
-            "اپنے تمام گاہکوں اور ان کے رابطوں کا باآسانی انتظام کریں اور بوقتِ ضرورت فوری تلاش کریں۔",
+            "تمام گاہکوں اور ان کے رابطے کی تفصیلات سنبھالیں، اور ضرورت پڑنے پر فوری تلاش کریں۔",
         },
         {
           title: "ڈیجیٹل کھاتہ (لیجر)",
           description:
-            "ادھار اور وصولیوں کا شفاف ریکارڈ رکھیں۔ ہر گاہک کے لین دین کی مکمل ہسٹری ایک نظر میں دیکھیں۔",
+            "ادھار اور ادائیگیوں کا مکمل حساب رکھیں۔ ہر گاہک کا لین دین ایک نظر میں دیکھیں۔",
         },
         {
           title: "ادائیگیاں اور ادھار",
           description:
-            "ادھار کا اندراج اور وصول شدہ رقم باآسانی درج کریں۔ مجموعی واجب الادا رقم پر فوری نظر رکھیں۔",
+            "نقد وصولی، جزوی ادائیگیاں، اور نیا ادھار تاریخ، وقت اور رسید نمبر کے ساتھ درج کریں۔",
         },
         {
-          title: "اخراجات کی نگرانی",
+          title: "اخراجات کا حساب",
           description:
-            "دکان کے تمام اخراجات درج اور زمرہ بند کریں۔ جانیے کہ ہر ماہ آپ کی رقم کہاں خرچ ہو رہی ہے۔",
+            "دکان کے روزانہ اخراجات — کرایہ، بجلی، ٹرانسپورٹ، سامان — درج کریں تاکہ اصلی منافع معلوم ہو۔",
         },
         {
-          title: "رپورٹس اور تجزیات",
+          title: "کاروباری رپورٹس",
           description:
-            "جامع مالیاتی رپورٹس حاصل کریں — کل فروخت، اخراجات، بقایا جات اور کاروباری ترقی کے واضح اعدادوشمار۔",
+            "اپنی روزانہ، ہفتہ وار اور ماہانہ فروخت، وصولیوں اور بقایا جات کے واضح خلاصے حاصل کریں۔",
         },
         {
-          title: "شاپ ڈیش بورڈ",
+          title: "موبائل فرینڈلی اور دو لسانی",
           description:
-            "سب کچھ دیکھنے کے لیے ایک مرکزی ڈیش بورڈ — گاہک، کھاتہ، ادائیگیاں، اخراجات اور روزانہ کا خلاصہ۔",
+            "کسی بھی اسمارٹ فون پر روانی سے کام کرتا ہے۔ اردو اور انگریزی دونوں زبانوں میں مکمل طور پر دستیاب۔",
         },
       ],
     },
     about: {
-      badge: "کھاتہ فلو کا تعارف",
-      titleStart: "دکانداروں کے لیے، ",
-      titleHighlight: "مقامی کاروبار کو سمجھنے والوں کی طرف سے",
-      titleEnd: " تیار کردہ",
-      p1: "کھاتہ فلو کا آغاز ایک مشاہدے سے ہوا — پشاور میں زیادہ تر چھوٹے دکاندار اب بھی کاغذی رجسٹروں اور یادداشت کے سہارے اپنا کاروبار چلاتے ہیں۔ یہ طریقہ تب تک چلتا ہے جب تک کوئی بڑا نقصان نہ ہو جائے۔",
-      p2: "ہم ہر دکاندار کو ایک ایسا سادہ ڈیجیٹل ورک اسپیس فراہم کر رہے ہیں جو پرانے کاغذی کھاتوں کی الجھنوں کو محفوظ، منظم اور باآسانی تلاش کے قابل ڈیجیٹل ریکارڈ سے بدل دیتا ہے۔",
-      p3: "کوئی پیچیدہ سافٹ ویئر نہیں، نہ کوئی مہنگی فیس۔ صرف وہی ضروری ٹولز جو ہر دکاندار کی ضرورت ہیں — کسٹمرز، کھاتہ، ادائیگیاں، اخراجات اور واضح رپورٹس۔",
+      badge: "کھاتہ فلو کے بارے میں",
+      titleStart: "پشاور کی مقامی دکانوں کے لیے ",
+      titleHighlight: "خصوصی طور پر تیار کردہ",
+      titleEnd: "، ہر چھوٹے کاروبار کے لیے موزوں",
+      p1: "کھاتہ فلو ایک سادہ مشاہدے سے شروع ہوا: پاکستان میں ہزاروں چھوٹی دکانیں اب بھی گاہکوں کے ادھار، روزانہ ادائیگیوں اور دکان کے اخراجات کے لیے کاغذی کھاتوں اور ڈائریوں پر انحصار کرتی ہیں۔ ان روایتی طریقوں سے اکثر ریکارڈ ضائع ہو جاتے ہیں، حساب میں غلطیاں ہوتی ہیں اور گاہکوں کے ساتھ غلط فہمیاں پیدا ہوتی ہیں۔",
+      p2: "ہم نے اسے بدلنے کے لیے کھاتہ فلو بنایا۔ خاص طور پر ان دکانداروں کے لیے تیار کیا گیا جو زیادہ ٹیکنالوجی سے واقف نہیں ہیں۔ کھاتہ فلو ایک ایسا سادہ اور قابل اعتماد ڈیجیٹل کھاتہ سسٹم فراہم کرتا ہے جو کسی بھی موبائل، ٹیبلٹ یا کمپیوٹر پر چلتا ہے۔ اردو اور انگریزی دونوں زبانوں میں معاونت کے ساتھ کوئی بھی چند منٹوں میں اس کا ماہر بن سکتا ہے۔",
+      p3: "پشاور، خیبر پختونخوا سے شروع ہونے والا ہمارا مشن مقامی تاجروں کو جدید ڈیجیٹل ٹولز فراہم کرنا ہے جو وقت بچائیں، الجھنیں ختم کریں اور کاروبار کو ترقی دیں۔",
       startFree: "مفت شروع کریں",
-      viewFeatures: "خصوصیات دیکھیں ←",
+      viewFeatures: "خصوصیات دیکھیں",
       highlights: [
-        { stat: "100%", label: "چھوٹی دکانوں کے لیے مفت" },
-        { stat: "موبائل", label: "موبائل فرسٹ ڈیزائن" },
-        { stat: "دو لسانی", label: "اردو اور انگریزی" },
-        { stat: "محفوظ", label: "ڈیٹا کی مکمل حفاظت" },
+        { stat: "100%", label: "ڈیمو کے لیے مفت" },
+        { stat: "2", label: "زبانیں (انگریزی / اردو)" },
+        { stat: "0", label: "حساب میں غلطی" },
       ],
     },
     footer: {
-      tagline1: "سادہ۔ محفوظ۔ بااثر۔",
-      tagline2: "چھوٹے دکانداروں کے لیے جدید ڈیجیٹل ورک اسپیس۔",
+      tagline1: "سادہ، قابل اعتماد دکان مینجمنٹ ساس",
+      tagline2: "پشاور اور پورے پاکستان کے مقامی تاجروں کے لیے تیار کردہ۔",
       productTitle: "پروڈکٹ",
-      supportTitle: "معاونت",
-      builtWithTitle: "ٹیکنالوجی اسٹیک",
+      supportTitle: "مدد اور معاونت",
+      builtWithTitle: "ٹیکنالوجی",
       links: {
         features: "خصوصیات",
         about: "ہمارے بارے میں",
@@ -318,6 +430,62 @@ const translations: Record<Language, Translations> = {
       copyright: "© 2026 کھاتہ فلو • سادہ۔ محفوظ۔ بااثر۔",
       techBar:
         "Built with Next.js • Supabase • PostgreSQL • Tailwind CSS • React Query • Vercel",
+    },
+    dashboard: {
+      menu: {
+        dashboard: "ڈیش بورڈ",
+        customersAndKhata: "گاہک اور کھاتہ",
+        allRecords: "تمام ریکارڈز",
+        payments: "وصولیاں",
+        expenses: "اخراجات",
+        reports: "رپورٹس",
+        settings: "سیٹنگز",
+      },
+      actions: {
+        newEntry: "نیا اندراج",
+        recordPayment: "رقم وصول کریں",
+        giveCredit: "ادھار دیں",
+        adjustItem: "آئٹم درستگی",
+        addCustomer: "نیا گاہک",
+        logExpense: "خرچہ درج کریں",
+        exportCsv: "ایکسپورٹ CSV",
+        print: "پرنٹ",
+        cancel: "منسوخ",
+        save: "محفوظ کریں",
+        apply: "لاگو کریں",
+        viewLedger: "کھاتہ لیجر",
+        receive: "وصول کریں",
+      },
+      kpis: {
+        outstandingUdhaar: "کل بقایا ادھار",
+        cashIn: "وصول شدہ نقد رقم",
+        monthlySales: "ماہانہ فروخت",
+        netCashflow: "خالص کیش فلو",
+        activeDebtors: "ادھار والے گاہک",
+        clearedAccounts: "بے باق اکاؤنٹس",
+        shopExpenses: "دکان کے اخراجات",
+        itemAdjustments: "آئٹم درستگیاں",
+      },
+      common: {
+        customer: "گاہک",
+        amount: "رقم",
+        date: "تاریخ",
+        status: "حالت",
+        description: "تفصیل",
+        reason: "وجہ",
+        paymentMethod: "طریقہ ادائیگی",
+        receiptNo: "رسید نمبر",
+        all: "تمام",
+        withUdhaar: "بقایا ادھار",
+        cleared: "بے باق",
+        searchPlaceholder: "گاہک کا نام، فون یا پتہ تلاش کریں...",
+        recentTransactions: "حالیہ لین دین",
+        topDebtors: "زیادہ ادھار والے گاہک",
+        viewAllRecords: "تمام ریکارڈز دیکھیں",
+        viewAllKhata: "تمام کھاتہ دیکھیں",
+        pkr: "روپے",
+        peshawar: "پشاور",
+      },
     },
   },
 };
@@ -339,20 +507,30 @@ const LanguageContext = createContext<LanguageContextType>({
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Language>("en");
 
+  // Hydrate language preference from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("KHATAFLOW_LANG") as Language | null;
+      if (saved === "en" || saved === "ur") {
+        setLangState(saved);
+        document.documentElement.lang = saved;
+        document.documentElement.dir = saved === "ur" ? "rtl" : "ltr";
+      }
+    }
+  }, []);
+
   const setLang = (newLang: Language) => {
     setLangState(newLang);
-    if (typeof document !== "undefined") {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("KHATAFLOW_LANG", newLang);
+      } catch {
+        // Ignore storage errors in restricted iframe
+      }
       document.documentElement.lang = newLang;
       document.documentElement.dir = newLang === "ur" ? "rtl" : "ltr";
     }
   };
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = lang;
-      document.documentElement.dir = lang === "ur" ? "rtl" : "ltr";
-    }
-  }, [lang]);
 
   const value: LanguageContextType = {
     lang,

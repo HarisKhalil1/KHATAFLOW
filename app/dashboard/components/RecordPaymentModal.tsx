@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import { useDashboard, PaymentMethod, PaymentItemAllocation } from "../context/DashboardContext";
+import WhatsAppShareModal from "./WhatsAppShareModal";
+import { generatePaymentReceiptText } from "../utils/whatsapp";
 
 function formatItemQuantityDisplay(qty: number, unit: string): string {
   if (unit === "kg" || unit === "liters" || unit === "L") {
@@ -31,6 +33,8 @@ export default function RecordPaymentModal() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   // Item allocations state map: itemId -> allocatedAmount string
   const [itemAllocations, setItemAllocations] = useState<Record<string, string>>({});
@@ -65,23 +69,6 @@ export default function RecordPaymentModal() {
   const unallocatedAmount = Math.max(0, numAmount - totalAllocated);
   const allocationExceedsPayment = totalAllocated > numAmount && numAmount > 0;
 
-  // Preset helper: Quick allocate Rice & Dalda oil for Tariq Rs. 10,000 scenario if pending
-  const handleQuickAllocateTariq = () => {
-    if (!bill) return;
-    const rice = pendingItems.find((it) => it.name.toLowerCase().includes("rice"));
-    const oil = pendingItems.find((it) => it.name.toLowerCase().includes("oil"));
-
-    const riceDue = rice ? rice.remainingBalance : 0;
-    const oilDue = oil ? oil.remainingBalance : 0;
-    const targetTotal = Math.min(10000, riceDue + oilDue);
-
-    setAmount(targetTotal > 0 ? targetTotal.toString() : "10000");
-    const updated: Record<string, string> = {};
-    if (rice && riceDue > 0) updated[rice.id] = Math.min(4000, riceDue).toString();
-    if (oil && oilDue > 0) updated[oil.id] = Math.min(6000, oilDue).toString();
-    setItemAllocations(updated);
-    setError(null);
-  };
 
   const handleItemAllocationChange = (itemId: string, val: string) => {
     setItemAllocations((prev) => ({
@@ -185,9 +172,7 @@ export default function RecordPaymentModal() {
       setError(result.error || "Failed to record payment.");
     } else {
       setSuccessMsg(`Payment of Rs. ${numAmount.toLocaleString()} successfully recorded!`);
-      setTimeout(() => {
-        closeModal();
-      }, 1200);
+      setPaymentRecorded(true);
     }
   };
 
@@ -227,7 +212,67 @@ export default function RecordPaymentModal() {
           </button>
         </div>
 
-        {/* Success Feedback */}
+        {paymentRecorded ? (
+          <div className="py-6 text-center space-y-4">
+            <div className="w-14 h-14 bg-green-100 text-green-700 rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold">
+              ✓
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-kf-navy">Payment Recorded Successfully</h3>
+              <p className="text-xs text-[#556B82] mt-1 max-w-sm mx-auto">
+                Rs. {numAmount.toLocaleString()} received from <strong>{selectedCustomer?.name}</strong>. Remaining balance: <strong className="text-green-700">Rs. {Math.max(0, currentBalance - numAmount).toLocaleString()}</strong>.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowWhatsApp(true)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>💬 Send WhatsApp Receipt</span>
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy border border-[#EADBCA] text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+
+            <WhatsAppShareModal
+              isOpen={showWhatsApp}
+              onClose={() => {
+                setShowWhatsApp(false);
+                closeModal();
+              }}
+              customerName={selectedCustomer?.name || ""}
+              customerPhone={selectedCustomer?.phone || ""}
+              title="Send Payment Receipt on WhatsApp"
+              initialMessageEn={generatePaymentReceiptText({
+                customerName: selectedCustomer?.name || "",
+                receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                date,
+                amountPaid: numAmount,
+                newBalance: Math.max(0, currentBalance - numAmount),
+                paymentMethod,
+                lang: "en",
+              })}
+              initialMessageUr={generatePaymentReceiptText({
+                customerName: selectedCustomer?.name || "",
+                receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                date,
+                amountPaid: numAmount,
+                newBalance: Math.max(0, currentBalance - numAmount),
+                paymentMethod,
+                lang: "ur",
+              })}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Success Feedback */}
         {successMsg && (
           <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-xl text-xs font-bold flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -288,17 +333,7 @@ export default function RecordPaymentModal() {
                 Payment Amount (PKR) <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
-                {customerId === "cust-1" &&
-                  pendingItems.some((it) => it.name.toLowerCase().includes("rice")) &&
-                  pendingItems.some((it) => it.name.toLowerCase().includes("oil")) && (
-                  <button
-                    type="button"
-                    onClick={handleQuickAllocateTariq}
-                    className="text-[11px] text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 hover:bg-green-100 font-bold cursor-pointer"
-                  >
-                    Preset: Rs. 10,000 for Rice & Oil
-                  </button>
-                )}
+
                 {currentBalance > 0 && (
                   <button
                     type="button"
@@ -549,6 +584,8 @@ export default function RecordPaymentModal() {
             </button>
           </div>
         </form>
+          </>
+        )}
       </div>
     </div>
   );

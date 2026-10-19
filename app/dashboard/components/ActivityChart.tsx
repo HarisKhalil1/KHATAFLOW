@@ -16,7 +16,7 @@ export default function ActivityChart() {
     }
     if (tx.type === "credit") {
       dateMap[tx.date].credit += tx.amount;
-    } else {
+    } else if (tx.type === "payment") {
       dateMap[tx.date].payment += tx.amount;
     }
   });

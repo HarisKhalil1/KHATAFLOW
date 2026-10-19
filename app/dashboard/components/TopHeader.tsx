@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDashboard } from "../context/DashboardContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 interface TopHeaderProps {
   onOpenMobile: () => void;
@@ -15,8 +16,12 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Real-time summary of your khata, udhaar, cashflow, and expenses",
   },
   "/dashboard/customers": {
-    title: "Customer Management",
-    subtitle: "Manage shop customers, contact information, and outstanding udhaar",
+    title: "Customers & Khata",
+    subtitle: "Manage customer accounts, khata balances, and itemized source bills",
+  },
+  "/dashboard/records": {
+    title: "All Records & Journal",
+    subtitle: "Chronological log of all customer credits, payments, adjustments, and expenses",
   },
   "/dashboard/khata": {
     title: "Digital Khata & Ledger",
@@ -40,8 +45,44 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   },
 };
 
+const PAGE_TITLES_UR: Record<string, { title: string; subtitle: string }> = {
+  "/dashboard": {
+    title: "دکان کا جائزہ",
+    subtitle: "آپ کے کھاتہ، ادھار، کیش فلو اور اخراجات کا فوری خلاصہ",
+  },
+  "/dashboard/customers": {
+    title: "گاہک اور کھاتہ",
+    subtitle: "گاہکوں کے اکاؤنٹس، رابطے اور بقایا ادھار کا مکمل انتظام",
+  },
+  "/dashboard/records": {
+    title: "تمام ریکارڈز اور روزنامچہ",
+    subtitle: "ادھار، ادائیگیوں، درستگیوں اور اخراجات کا تاریخی اندراج",
+  },
+  "/dashboard/khata": {
+    title: "ڈیجیٹل کھاتہ اور لیجر",
+    subtitle: "ہر گاہک کا کریڈٹ اور ڈیبٹ رننگ بیلنس لیجر",
+  },
+  "/dashboard/payments": {
+    title: "وصولیوں کا ریکارڈ",
+    subtitle: "نقد رقم، بینک اور ایزی پیسہ / جاز کیش کی وصولیاں",
+  },
+  "/dashboard/expenses": {
+    title: "دکان کے اخراجات",
+    subtitle: "دکان کا کرایہ، بجلی بل، ٹرانسپورٹ اور روزانہ اخراجات",
+  },
+  "/dashboard/reports": {
+    title: "کاروباری رپورٹس اور گوشوارے",
+    subtitle: "ادھار، نقد کیش فلو اور منافع کے تفصیلی جائزے",
+  },
+  "/dashboard/settings": {
+    title: "سیٹنگز اور ڈیمو کنٹرولز",
+    subtitle: "دکان کی معلومات اور ڈیٹا محفوظ کرنے کی سیٹنگز",
+  },
+};
+
 export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
   const pathname = usePathname();
+  const { lang, setLang, t } = useLanguage();
   const {
     notifications,
     unreadNotificationCount,
@@ -58,9 +99,10 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
   const profileRef = useRef<HTMLDivElement>(null);
   const quickRef = useRef<HTMLDivElement>(null);
 
-  const currentMeta = PAGE_TITLES[pathname] || {
-    title: "Shop Dashboard",
-    subtitle: "KhataFlow Shop Owner Portal",
+  const metaSource = lang === "ur" ? PAGE_TITLES_UR : PAGE_TITLES;
+  const currentMeta = metaSource[pathname] || {
+    title: lang === "ur" ? "دکان ڈیش بورڈ" : "Shop Dashboard",
+    subtitle: lang === "ur" ? "کھاتہ فلو پورٹل" : "KhataFlow Shop Owner Portal",
   };
 
   // Close menus when clicking outside
@@ -250,6 +292,18 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
             </div>
           )}
         </div>
+
+        {/* Bilingual Language Switcher Toggle */}
+        <button
+          type="button"
+          onClick={() => setLang(lang === "en" ? "ur" : "en")}
+          aria-label={lang === "en" ? "Switch to Urdu" : "Switch to English"}
+          title={lang === "en" ? "اردو میں دیکھیں (Switch to Urdu)" : "Switch to English"}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[#EADBCA] bg-[#FCF8F2] hover:bg-[#F5ECE1] hover:border-kf-orange/40 text-xs font-extrabold text-kf-navy transition-all cursor-pointer shadow-2xs"
+        >
+          <span className="text-xs">🌐</span>
+          <span className="tabular-nums font-bold">{lang === "en" ? "اردو" : "English"}</span>
+        </button>
 
         {/* Profile Dropdown */}
         <div className="relative" ref={profileRef}>

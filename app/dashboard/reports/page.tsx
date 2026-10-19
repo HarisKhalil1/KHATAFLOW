@@ -678,10 +678,12 @@ export default function ReportsPage() {
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             tx.type === "credit"
                               ? "bg-orange-50 text-kf-orange border border-orange-200"
+                              : tx.type === "adjustment"
+                              ? "bg-amber-50 text-amber-800 border border-amber-200"
                               : "bg-green-50 text-green-700 border border-green-200"
                           }`}
                         >
-                          {tx.type === "credit" ? "Credit" : "Payment"}
+                          {tx.type === "credit" ? "Credit" : tx.type === "adjustment" ? "Adjustment" : "Payment"}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-[#556B82] max-w-xs truncate">{tx.description}</td>

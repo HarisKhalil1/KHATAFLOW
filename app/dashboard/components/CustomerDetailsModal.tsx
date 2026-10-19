@@ -1,7 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useDashboard } from "../context/DashboardContext";
+import WhatsAppShareModal from "./WhatsAppShareModal";
+import {
+  generateBillReceiptText,
+  generateLedgerStatementText,
+  generateReminderText,
+} from "../utils/whatsapp";
 
 interface CustomerDetailsModalProps {
   customerId: string | null;
@@ -10,6 +16,17 @@ interface CustomerDetailsModalProps {
 
 export default function CustomerDetailsModal({ customerId, onClose }: CustomerDetailsModalProps) {
   const { getCustomerWithBalance, getCustomerLedger, getCustomerBill, openModal } = useDashboard();
+  const [whatsAppModal, setWhatsAppModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    msgEn: string;
+    msgUr: string;
+  }>({
+    isOpen: false,
+    title: "",
+    msgEn: "",
+    msgUr: "",
+  });
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -30,6 +47,86 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
 
   const ledger = getCustomerLedger(customerId);
   const bill = getCustomerBill(customerId);
+
+  const handleShareLedger = () => {
+    const totalPurchases = customer.openingBalance + customer.totalCredit;
+    const msgEn =
+      customer.currentBalance > 0
+        ? generateReminderText({
+            customerName: customer.name,
+            currentBalance: customer.currentBalance,
+            lang: "en",
+          })
+        : generateLedgerStatementText({
+            customerName: customer.name,
+            totalPurchases,
+            totalPaid: customer.totalPaid,
+            currentBalance: customer.currentBalance,
+            lang: "en",
+          });
+
+    const msgUr =
+      customer.currentBalance > 0
+        ? generateReminderText({
+            customerName: customer.name,
+            currentBalance: customer.currentBalance,
+            lang: "ur",
+          })
+        : generateLedgerStatementText({
+            customerName: customer.name,
+            totalPurchases,
+            totalPaid: customer.totalPaid,
+            currentBalance: customer.currentBalance,
+            lang: "ur",
+          });
+
+    setWhatsAppModal({
+      isOpen: true,
+      title:
+        customer.currentBalance > 0
+          ? "Send Udhaar Reminder on WhatsApp"
+          : "Share Ledger Statement on WhatsApp",
+      msgEn,
+      msgUr,
+    });
+  };
+
+  const handleShareBill = () => {
+    if (!bill) return;
+    const items = bill.items.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      unit: i.unit,
+      unitPrice: i.unitPrice,
+      lineTotal: i.lineTotal,
+    }));
+    const msgEn = generateBillReceiptText({
+      customerName: customer.name,
+      billNo: bill.billNo,
+      date: bill.date,
+      items,
+      totalAmount: bill.totalAmount,
+      paidAmount: bill.paidAmount,
+      remainingBalance: bill.remainingBalance,
+      lang: "en",
+    });
+    const msgUr = generateBillReceiptText({
+      customerName: customer.name,
+      billNo: bill.billNo,
+      date: bill.date,
+      items,
+      totalAmount: bill.totalAmount,
+      paidAmount: bill.paidAmount,
+      remainingBalance: bill.remainingBalance,
+      lang: "ur",
+    });
+    setWhatsAppModal({
+      isOpen: true,
+      title: `Share Bill #${bill.billNo} on WhatsApp`,
+      msgEn,
+      msgUr,
+    });
+  };
 
   return (
     <div
@@ -150,6 +247,14 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
             >
               ↓ Receive Payment
             </button>
+            <button
+              type="button"
+              onClick={handleShareLedger}
+              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <span>💬</span>
+              <span>WhatsApp {customer.currentBalance > 0 ? "Reminder" : "Statement"}</span>
+            </button>
           </div>
         </div>
 
@@ -165,9 +270,19 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
                     Original Source Bill #{bill.billNo}
                   </h3>
                 </div>
-                <span className="text-[11px] font-bold text-[#556B82]">
-                  Total: Rs. {bill.totalAmount.toLocaleString()} • Paid: Rs. {bill.paidAmount.toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-[#556B82]">
+                    Total: Rs. {bill.totalAmount.toLocaleString()} • Paid: Rs. {bill.paidAmount.toLocaleString()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleShareBill}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <span>💬</span>
+                    <span>WhatsApp Bill</span>
+                  </button>
+                </div>
               </div>
               <p className="text-[11px] text-[#556B82] mb-3">
                 Protected item ledger: adjustments and allocations reconcile item-by-item against these exact lines.
@@ -236,10 +351,16 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
                           className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                             tx.type === "credit"
                               ? "bg-orange-100 text-kf-orange"
+                              : tx.type === "adjustment"
+                              ? "bg-amber-100 text-amber-800"
                               : "bg-green-100 text-green-700"
                           }`}
                         >
-                          {tx.type === "credit" ? "Udhaar Given" : "Payment Received"}
+                          {tx.type === "credit"
+                            ? "Udhaar Given"
+                            : tx.type === "adjustment"
+                            ? "Item Adjustment"
+                            : "Payment Received"}
                         </span>
                         <span className="text-[11px] text-[#8DA6BC] font-medium">{tx.date}</span>
                         {tx.receiptNo && (
@@ -257,7 +378,11 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
                     <div className="text-right flex-shrink-0">
                       <div
                         className={`font-extrabold ${
-                          tx.type === "credit" ? "text-kf-orange" : "text-green-600"
+                          tx.type === "credit"
+                            ? "text-kf-orange"
+                            : tx.type === "adjustment"
+                            ? "text-amber-700"
+                            : "text-green-600"
                         }`}
                       >
                         {tx.type === "credit" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
@@ -283,6 +408,17 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
             Done
           </button>
         </div>
+
+        {/* WhatsApp Share Modal */}
+        <WhatsAppShareModal
+          isOpen={whatsAppModal.isOpen}
+          onClose={() => setWhatsAppModal((prev) => ({ ...prev, isOpen: false }))}
+          customerName={customer.name}
+          customerPhone={customer.phone}
+          title={whatsAppModal.title}
+          initialMessageEn={whatsAppModal.msgEn}
+          initialMessageUr={whatsAppModal.msgUr}
+        />
       </div>
     </div>
   );

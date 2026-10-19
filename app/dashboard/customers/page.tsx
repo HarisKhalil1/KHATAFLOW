@@ -1,29 +1,46 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useDashboard } from "../context/DashboardContext";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
 
-export default function CustomersPage() {
-  const { customersWithBalances, openModal } = useDashboard();
+export default function CustomersAndKhataPage() {
+  const { customersWithBalances, openModal, getCustomerBill } = useDashboard();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cleared">("all");
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<string | null>(null);
 
   // Filter customers
-  const filteredCustomers = customersWithBalances.filter((c) => {
-    const query = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      c.name.toLowerCase().includes(query) ||
-      c.phone.replace(/[\s-]/g, "").includes(query.replace(/[\s-]/g, "")) ||
-      c.address.toLowerCase().includes(query);
+  const filteredCustomers = useMemo(() => {
+    return customersWithBalances.filter((c) => {
+      const query = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        c.name.toLowerCase().includes(query) ||
+        c.phone.replace(/[\s-]/g, "").includes(query.replace(/[\s-]/g, "")) ||
+        c.address.toLowerCase().includes(query);
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    if (statusFilter === "active") return c.currentBalance > 0;
-    if (statusFilter === "cleared") return c.currentBalance === 0;
-    return true;
-  });
+      if (statusFilter === "active") return c.currentBalance > 0;
+      if (statusFilter === "cleared") return c.currentBalance === 0;
+      return true;
+    });
+  }, [customersWithBalances, searchQuery, statusFilter]);
+
+  // Aggregate stats
+  const stats = useMemo(() => {
+    const totalCustomers = customersWithBalances.length;
+    const withUdhaar = customersWithBalances.filter((c) => c.currentBalance > 0);
+    const cleared = customersWithBalances.filter((c) => c.currentBalance === 0);
+    const totalOutstanding = customersWithBalances.reduce((sum, c) => sum + c.currentBalance, 0);
+
+    return {
+      totalCustomers,
+      withUdhaarCount: withUdhaar.length,
+      clearedCount: cleared.length,
+      totalOutstanding,
+    };
+  }, [customersWithBalances]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -31,10 +48,10 @@ export default function CustomersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-[#EADBCA] shadow-xs">
         <div>
           <h2 className="text-base sm:text-lg font-extrabold text-kf-navy tracking-tight">
-            Shop Customers & Accounts
+            Customers &amp; Khata Accounts
           </h2>
           <p className="text-xs text-[#556B82]">
-            Total {customersWithBalances.length} customer ledgers in system
+            Complete customer ledger directory, outstanding udhaar balances, and itemized billing
           </p>
         </div>
 
@@ -49,6 +66,49 @@ export default function CustomersPage() {
           </svg>
           <span>Add New Customer</span>
         </button>
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-[#EADBCA] shadow-xs">
+          <span className="text-[10px] font-bold text-[#8DA6BC] uppercase tracking-wider block mb-1">
+            Total Accounts
+          </span>
+          <span className="text-lg sm:text-xl font-extrabold text-kf-navy tabular-nums">
+            {stats.totalCustomers}
+          </span>
+          <span className="text-[11px] text-[#556B82] block mt-0.5">Shop customer ledgers</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-[#EADBCA] shadow-xs">
+          <span className="text-[10px] font-bold text-kf-orange uppercase tracking-wider block mb-1">
+            Total Udhaar Due
+          </span>
+          <span className="text-lg sm:text-xl font-extrabold text-kf-orange tabular-nums">
+            Rs. {stats.totalOutstanding.toLocaleString()}
+          </span>
+          <span className="text-[11px] text-[#556B82] block mt-0.5">Across all accounts</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-[#EADBCA] shadow-xs">
+          <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">
+            With Pending Udhaar
+          </span>
+          <span className="text-lg sm:text-xl font-extrabold text-amber-700 tabular-nums">
+            {stats.withUdhaarCount}
+          </span>
+          <span className="text-[11px] text-[#556B82] block mt-0.5">Require follow-up</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-[#EADBCA] shadow-xs">
+          <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider block mb-1">
+            Cleared Accounts
+          </span>
+          <span className="text-lg sm:text-xl font-extrabold text-green-700 tabular-nums">
+            {stats.clearedCount}
+          </span>
+          <span className="text-[11px] text-[#556B82] block mt-0.5">Zero outstanding</span>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -89,7 +149,7 @@ export default function CustomersPage() {
                 : "text-[#556B82] hover:text-kf-navy"
             }`}
           >
-            All ({customersWithBalances.length})
+            All ({stats.totalCustomers})
           </button>
           <button
             type="button"
@@ -100,7 +160,7 @@ export default function CustomersPage() {
                 : "text-[#556B82] hover:text-kf-navy"
             }`}
           >
-            With Udhaar ({customersWithBalances.filter((c) => c.currentBalance > 0).length})
+            With Udhaar ({stats.withUdhaarCount})
           </button>
           <button
             type="button"
@@ -111,12 +171,12 @@ export default function CustomersPage() {
                 : "text-[#556B82] hover:text-kf-navy"
             }`}
           >
-            Cleared ({customersWithBalances.filter((c) => c.currentBalance === 0).length})
+            Cleared ({stats.clearedCount})
           </button>
         </div>
       </div>
 
-      {/* Customer List / Table */}
+      {/* Customer Cards Grid */}
       {filteredCustomers.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-[#EADBCA] shadow-xs">
           <div className="w-12 h-12 rounded-2xl bg-[#FFF2E5] text-kf-orange flex items-center justify-center mx-auto mb-3 font-bold text-xl">
@@ -139,101 +199,138 @@ export default function CustomersPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-          {filteredCustomers.map((customer) => (
-            <div
-              key={customer.id}
-              className="bg-white rounded-2xl p-4 sm:p-5 border border-[#EADBCA] shadow-xs hover:border-kf-orange/40 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
-            >
-              <div>
-                {/* Header with Avatar, Name, Phone and Status Badge */}
-                <div className="flex items-start justify-between gap-2.5 mb-3">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0">
-                      {customer.name.slice(0, 2).toUpperCase()}
+          {filteredCustomers.map((customer) => {
+            const hasBill = !!getCustomerBill(customer.id);
+
+            return (
+              <div
+                key={customer.id}
+                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#EADBCA] shadow-xs hover:border-kf-orange/40 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+              >
+                <div>
+                  {/* Header with Avatar, Name, Phone and Status Badge */}
+                  <div className="flex items-start justify-between gap-2.5 mb-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0">
+                        {customer.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3
+                          className="text-sm font-extrabold text-kf-navy truncate"
+                          title={customer.name}
+                        >
+                          {customer.name}
+                        </h3>
+                        <p className="text-xs font-semibold text-[#556B82] truncate">
+                          {customer.phone}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3
-                        className="text-sm font-extrabold text-kf-navy truncate"
-                        title={customer.name}
-                      >
-                        {customer.name}
-                      </h3>
-                      <p className="text-xs font-semibold text-[#556B82] truncate">
-                        {customer.phone}
-                      </p>
-                    </div>
+
+                    <span
+                      className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold whitespace-nowrap self-start ${
+                        customer.currentBalance === 0
+                          ? "bg-green-50 text-green-700 border border-green-200"
+                          : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
+                      }`}
+                    >
+                      {customer.currentBalance === 0 ? "Cleared" : "Has Udhaar"}
+                    </span>
                   </div>
 
-                  <span
-                    className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold whitespace-nowrap self-start ${
-                      customer.currentBalance === 0
-                        ? "bg-green-50 text-green-700 border border-green-200"
-                        : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
-                    }`}
-                  >
-                    {customer.currentBalance === 0 ? "Cleared" : "Active"}
-                  </span>
+                  {/* Address */}
+                  <div className="text-xs text-[#6F8599] mb-3.5 flex items-center gap-1.5 truncate">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#FF6A00"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="flex-shrink-0"
+                    >
+                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    <span className="truncate">{customer.address}</span>
+                  </div>
+
+                  {/* Balance Due Box */}
+                  <div className="p-3 bg-[#FCF8F2] rounded-xl border border-[#F0E4D4] mb-3.5 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-[#8DA6BC] uppercase tracking-wider block">
+                        Outstanding Khata
+                      </span>
+                      <span
+                        className={`text-base font-extrabold tabular-nums ${
+                          customer.currentBalance === 0 ? "text-green-600" : "text-kf-orange"
+                        }`}
+                      >
+                        Rs. {customer.currentBalance.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {hasBill && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-white border border-[#EADBCA] text-[#556B82] rounded-md">
+                        Itemized Bill
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Address */}
-                <div className="text-xs text-[#6F8599] mb-3.5 flex items-center gap-1.5 truncate">
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#FF6A00"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="flex-shrink-0"
-                  >
-                    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  <span className="truncate">{customer.address}</span>
-                </div>
+                {/* Card Actions */}
+                <div className="space-y-2 pt-2 border-t border-[#F0E4D4]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openModal("credit", customer.id)}
+                      className="py-2 px-2 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-xl border border-[#FFD9B3] transition-colors cursor-pointer text-center"
+                    >
+                      + Give Credit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={customer.currentBalance <= 0}
+                      onClick={() => openModal("payment", customer.id)}
+                      className="py-2 px-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-colors cursor-pointer text-center shadow-2xs"
+                    >
+                      ↓ Receive
+                    </button>
+                  </div>
 
-                {/* Balance Due Box */}
-                <div className="p-3 bg-[#FCF8F2] rounded-xl border border-[#F0E4D4] mb-4 flex items-center justify-between">
-                  <span className="text-xs text-[#556B82] font-semibold">Balance Due:</span>
-                  <span
-                    className={`text-base font-extrabold tabular-nums ${
-                      customer.currentBalance === 0 ? "text-green-600" : "text-kf-navy"
-                    }`}
-                  >
-                    Rs. {customer.currentBalance.toLocaleString()}
-                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCustomerForDetails(customer.id)}
+                      className="py-1.5 px-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                    >
+                      Khata Ledger
+                    </button>
+
+                    {hasBill ? (
+                      <button
+                        type="button"
+                        onClick={() => openModal("item-adjust", customer.id)}
+                        className="py-1.5 px-2 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#8C4B00] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                      >
+                        ⚖️ Adjust Item
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCustomerForDetails(customer.id)}
+                        className="py-1.5 px-2 bg-white hover:bg-[#FAF3E8] text-[#556B82] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                      >
+                        View Account
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              {/* Card Actions */}
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#F0E4D4]">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCustomerForDetails(customer.id)}
-                  className="py-1.5 px-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-[11px] font-bold rounded-lg transition-colors cursor-pointer text-center"
-                >
-                  Ledger
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openModal("credit", customer.id)}
-                  className="py-1.5 px-2 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-[11px] font-bold rounded-lg border border-[#FFD9B3] transition-colors cursor-pointer text-center"
-                >
-                  + Credit
-                </button>
-                <button
-                  type="button"
-                  disabled={customer.currentBalance <= 0}
-                  onClick={() => openModal("payment", customer.id)}
-                  className="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer text-center shadow-2xs"
-                >
-                  Receive
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
