@@ -31,6 +31,30 @@ export interface BillItem {
   remainingBalance: number; // lineTotal - paidAmount
 }
 
+export interface StructuredPurchaseItemInput {
+  name: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface ProductCatalogItem {
+  name: string;
+  defaultUnit: string;
+  defaultRate: number;
+}
+
+export const STANDARD_PRODUCTS: ProductCatalogItem[] = [
+  { name: "Rice (Basmati)", defaultUnit: "kg", defaultRate: 2000 },
+  { name: "Dalda oil", defaultUnit: "kg", defaultRate: 3000 },
+  { name: "Eggs", defaultUnit: "pieces", defaultRate: 454.55 },
+  { name: "Sugar", defaultUnit: "kg", defaultRate: 160 },
+  { name: "Wheat Flour (Atta)", defaultUnit: "kg", defaultRate: 150 },
+  { name: "Tea (Tapal Danedar)", defaultUnit: "kg", defaultRate: 1600 },
+  { name: "Milk", defaultUnit: "liters", defaultRate: 220 },
+  { name: "Pulses (Daal Chana)", defaultUnit: "kg", defaultRate: 320 },
+];
+
 export interface CustomerBill {
   id: string;
   billNo: string;
@@ -207,10 +231,12 @@ interface DashboardContextType {
 
   addCredit: (data: {
     customerId: string;
-    amount: number;
+    amount?: number;
     date: string;
-    description: string;
+    description?: string;
     receiptNo?: string;
+    items?: StructuredPurchaseItemInput[];
+    notes?: string;
   }) => { success: boolean; error?: string; transaction?: LedgerTransaction };
 
   addExpense: (data: {
@@ -1072,27 +1098,131 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [customersWithBalances, bills]
   );
 
-  // Add Credit (Udhaar) action
+  // Add Credit (Udhaar) action with structured items support
   const addCredit = useCallback(
     (data: {
       customerId: string;
-      amount: number;
+      amount?: number;
       date: string;
-      description: string;
+      description?: string;
       receiptNo?: string;
+      items?: StructuredPurchaseItemInput[];
+      notes?: string;
     }) => {
       const customer = customers.find((c) => c.id === data.customerId);
       if (!customer) {
         return { success: false, error: "Customer not found." };
       }
 
-      const numAmount = Number(data.amount);
-      if (isNaN(numAmount) || numAmount <= 0) {
-        return { success: false, error: "Credit amount must be greater than zero." };
-      }
+      let creditAmount = 0;
+      let descriptionText = data.description?.trim() || "";
+      let targetBillId: string | undefined;
 
-      if (!data.description.trim()) {
-        return { success: false, error: "Transaction description or items purchased is required." };
+      // Handle structured items if provided
+      if (data.items && data.items.length > 0) {
+        // Validate each item
+        for (const item of data.items) {
+          if (!item.name || !item.name.trim()) {
+            return { success: false, error: "Every item must have a valid name." };
+          }
+          if (isNaN(item.quantity) || item.quantity <= 0) {
+            return {
+              success: false,
+              error: `Invalid quantity for item "${item.name}". Quantity must be greater than zero.`,
+            };
+          }
+          if (isNaN(item.unitPrice) || item.unitPrice <= 0) {
+            return {
+              success: false,
+              error: `Invalid rate per unit for item "${item.name}". Rate must be greater than zero.`,
+            };
+          }
+        }
+
+        creditAmount = data.items.reduce(
+          (sum, it) => sum + Math.round(Number(it.quantity) * Number(it.unitPrice)),
+          0
+        );
+
+        if (creditAmount <= 0) {
+          return { success: false, error: "Total credit amount must be greater than zero." };
+        }
+
+        const existingBill = bills.find((b) => b.customerId === data.customerId);
+        const billId = existingBill ? existingBill.id : `bill-${Date.now()}`;
+        targetBillId = billId;
+
+        const createdBillItems: BillItem[] = data.items.map((it, idx) => {
+          const qty = Number(it.quantity);
+          const rate = Number(it.unitPrice);
+          const lineTotal = Math.round(qty * rate);
+          return {
+            id: `item-${Date.now()}-${idx}`,
+            billId,
+            name: it.name.trim(),
+            quantity: qty,
+            unit: it.unit?.trim() || "kg",
+            unitPrice: rate,
+            unitCost: Math.round(rate * 0.78),
+            lineTotal,
+            paidAmount: 0,
+            remainingBalance: lineTotal,
+          };
+        });
+
+        if (existingBill) {
+          setBills((prev) =>
+            prev.map((b) => {
+              if (b.id !== billId) return b;
+              const updatedItems = [...b.items, ...createdBillItems];
+              const newTotal = updatedItems.reduce((sum, item) => sum + item.lineTotal, 0);
+              const newPaid = updatedItems.reduce((sum, item) => sum + item.paidAmount, 0);
+              return {
+                ...b,
+                items: updatedItems,
+                totalAmount: newTotal,
+                totalCost: b.totalCost + Math.round(creditAmount * 0.78),
+                paidAmount: newPaid,
+                remainingBalance: Math.max(0, newTotal - newPaid),
+              };
+            })
+          );
+        } else {
+          const billNo = data.receiptNo?.trim() || `BILL-${Math.floor(1000 + Math.random() * 9000)}`;
+          const newBill: CustomerBill = {
+            id: billId,
+            billNo,
+            customerId: customer.id,
+            customerName: customer.name,
+            date: data.date || new Date().toISOString().split("T")[0],
+            items: createdBillItems,
+            totalAmount: creditAmount,
+            totalCost: Math.round(creditAmount * 0.78),
+            paidAmount: 0,
+            remainingBalance: creditAmount,
+            notes: data.notes?.trim() || data.description?.trim(),
+          };
+          setBills((prev) => [newBill, ...prev]);
+        }
+
+        const itemsSummary = data.items
+          .map((i) => `${i.name} (${i.quantity} ${i.unit} @ Rs. ${i.unitPrice.toLocaleString()})`)
+          .join(", ");
+
+        if (data.notes && data.notes.trim()) {
+          descriptionText = `${itemsSummary} — Note: ${data.notes.trim()}`;
+        } else {
+          descriptionText = itemsSummary;
+        }
+      } else {
+        // Fallback for simple credit without individual item rows
+        creditAmount = Number(data.amount);
+        if (isNaN(creditAmount) || creditAmount <= 0) {
+          return { success: false, error: "Credit amount must be greater than zero." };
+        }
+        if (!descriptionText) {
+          return { success: false, error: "Transaction description or items purchased is required." };
+        }
       }
 
       const newTx: LedgerTransaction = {
@@ -1100,10 +1230,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         customerId: customer.id,
         customerName: customer.name,
         type: "credit",
-        amount: numAmount,
+        amount: creditAmount,
         date: data.date || new Date().toISOString().split("T")[0],
-        description: data.description.trim(),
+        description: descriptionText,
         receiptNo: data.receiptNo?.trim() || `REC-${Math.floor(1000 + Math.random() * 9000)}`,
+        billId: targetBillId,
       };
 
       setTransactions((prev) => [newTx, ...prev]);
@@ -1111,7 +1242,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const newNotif: NotificationItem = {
         id: `notif-${Date.now()}`,
         title: "Credit Issued",
-        message: `Rs. ${numAmount.toLocaleString()} credit given to ${customer.name}.`,
+        message: `Rs. ${creditAmount.toLocaleString()} credit given to ${customer.name}.`,
         time: "Just now",
         type: "credit",
         read: false,
@@ -1120,7 +1251,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, transaction: newTx };
     },
-    [customers]
+    [customers, bills]
   );
 
   // Add Expense action

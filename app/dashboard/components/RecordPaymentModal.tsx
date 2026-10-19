@@ -34,6 +34,12 @@ export default function RecordPaymentModal() {
 
   const bill = getCustomerBill(customerId);
 
+  // FILTER OUT FULLY PAID ITEMS:
+  // Only items with remainingBalance > 0 appear in pending payments.
+  // Fully paid items (remainingBalance === 0) are excluded from the pending list.
+  const pendingItems = (bill?.items || []).filter((item) => item.remainingBalance > 0);
+  const hasBillItemsOnRecord = (bill?.items || []).length > 0;
+
   // Helper to handle customer change and clear allocations
   const handleCustomerChange = (newCustId: string) => {
     setCustomerId(newCustId);
@@ -50,20 +56,20 @@ export default function RecordPaymentModal() {
   const unallocatedAmount = Math.max(0, numAmount - totalAllocated);
   const allocationExceedsPayment = totalAllocated > numAmount && numAmount > 0;
 
-  // Preset helper: Quick allocate Rice & Dalda oil for Tariq Rs. 10,000 scenario
+  // Preset helper: Quick allocate Rice & Dalda oil for Tariq Rs. 10,000 scenario if pending
   const handleQuickAllocateTariq = () => {
     if (!bill) return;
-    setAmount("10000");
+    const rice = pendingItems.find((it) => it.name.toLowerCase().includes("rice"));
+    const oil = pendingItems.find((it) => it.name.toLowerCase().includes("oil"));
+
+    const riceDue = rice ? rice.remainingBalance : 0;
+    const oilDue = oil ? oil.remainingBalance : 0;
+    const targetTotal = Math.min(10000, riceDue + oilDue);
+
+    setAmount(targetTotal > 0 ? targetTotal.toString() : "10000");
     const updated: Record<string, string> = {};
-    bill.items.forEach((it) => {
-      if (it.name.toLowerCase().includes("rice")) {
-        updated[it.id] = "4000";
-      } else if (it.name.toLowerCase().includes("oil")) {
-        updated[it.id] = "6000";
-      } else {
-        updated[it.id] = "0"; // Eggs left unpaid
-      }
-    });
+    if (rice && riceDue > 0) updated[rice.id] = Math.min(4000, riceDue).toString();
+    if (oil && oilDue > 0) updated[oil.id] = Math.min(6000, oilDue).toString();
     setItemAllocations(updated);
     setError(null);
   };
@@ -73,6 +79,26 @@ export default function RecordPaymentModal() {
       ...prev,
       [itemId]: val,
     }));
+    setError(null);
+  };
+
+  // Click price button "Pay Due" to allocate full remaining balance of an item
+  const handlePayDue = (itemId: string, dueAmount: number) => {
+    const updated = {
+      ...itemAllocations,
+      [itemId]: dueAmount.toString(),
+    };
+    setItemAllocations(updated);
+
+    // If amount is 0 or less than the total allocations, update amount automatically
+    const newTotalAlloc = Object.entries(updated).reduce((sum, [, val]) => {
+      const n = parseFloat(val) || 0;
+      return sum + (n > 0 ? n : 0);
+    }, 0);
+
+    if (numAmount < newTotalAlloc) {
+      setAmount(newTotalAlloc.toString());
+    }
     setError(null);
   };
 
@@ -99,7 +125,7 @@ export default function RecordPaymentModal() {
 
     // Format item allocations array if used
     let formattedAllocations: PaymentItemAllocation[] | undefined;
-    if (useItemAllocation && bill && bill.items.length > 0) {
+    if (useItemAllocation && pendingItems.length > 0) {
       if (allocationExceedsPayment) {
         setError(
           `Total item allocations (Rs. ${totalAllocated.toLocaleString()}) exceed payment amount (Rs. ${numAmount.toLocaleString()}).`
@@ -109,7 +135,7 @@ export default function RecordPaymentModal() {
 
       formattedAllocations = Object.entries(itemAllocations)
         .map(([itemId, valStr]) => {
-          const item = bill.items.find((i) => i.id === itemId);
+          const item = pendingItems.find((i) => i.id === itemId);
           const allocatedNum = parseFloat(valStr) || 0;
           return {
             itemId,
@@ -121,7 +147,7 @@ export default function RecordPaymentModal() {
 
       // Validate individual item balances
       for (const alloc of formattedAllocations) {
-        const item = bill.items.find((i) => i.id === alloc.itemId);
+        const item = pendingItems.find((i) => i.id === alloc.itemId);
         if (item && alloc.allocatedAmount > item.remainingBalance) {
           setError(
             `Allocation of Rs. ${alloc.allocatedAmount.toLocaleString()} to ${item.name} exceeds remaining balance of Rs. ${item.remainingBalance.toLocaleString()}.`
@@ -172,7 +198,7 @@ export default function RecordPaymentModal() {
                 Record Customer Payment
               </h2>
               <p className="text-xs text-[#556B82]">
-                Accurate cash collection & verified item-level allocation
+                Accurate cash collection & pending item-level allocation
               </p>
             </div>
           </div>
@@ -250,7 +276,9 @@ export default function RecordPaymentModal() {
                 Payment Amount (PKR) <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
-                {customerId === "cust-1" && (
+                {customerId === "cust-1" &&
+                  pendingItems.some((it) => it.name.toLowerCase().includes("rice")) &&
+                  pendingItems.some((it) => it.name.toLowerCase().includes("oil")) && (
                   <button
                     type="button"
                     onClick={handleQuickAllocateTariq}
@@ -302,32 +330,43 @@ export default function RecordPaymentModal() {
           </div>
 
           {/* ITEM-WISE PAYMENT ALLOCATION SECTION */}
-          {bill && bill.items.length > 0 && (
+          {hasBillItemsOnRecord && (
             <div className="p-3.5 bg-[#FAF3E8] border border-[#EADBCA] rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-xs font-extrabold text-kf-navy block">
-                    Item-Level Payment Allocation
+                    Pending Item Payment Allocation
                   </span>
                   <span className="text-[11px] text-[#556B82]">
-                    Bill #{bill.billNo} — Allocate payment to specific items
+                    Bill #{bill?.billNo} — Only items with an unpaid balance appear below
                   </span>
                 </div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-kf-navy cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useItemAllocation}
-                    onChange={(e) => setUseItemAllocation(e.target.checked)}
-                    className="rounded border-[#EADBCA] text-kf-orange focus:ring-kf-orange cursor-pointer"
-                  />
-                  <span>Enable Allocation</span>
-                </label>
+                {pendingItems.length > 0 && (
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-kf-navy cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useItemAllocation}
+                      onChange={(e) => setUseItemAllocation(e.target.checked)}
+                      className="rounded border-[#EADBCA] text-kf-orange focus:ring-kf-orange cursor-pointer"
+                    />
+                    <span>Enable Allocation</span>
+                  </label>
+                )}
               </div>
 
-              {useItemAllocation && (
+              {/* When all items on bill are fully cleared */}
+              {pendingItems.length === 0 ? (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-800 font-semibold flex items-center gap-2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>✓ All items on Bill #{bill?.billNo} are fully paid. No pending item dues.</span>
+                </div>
+              ) : useItemAllocation && (
                 <div className="space-y-2 pt-1 border-t border-[#F0E4D4]">
-                  {bill.items.map((item) => {
+                  {pendingItems.map((item) => {
                     const allocVal = itemAllocations[item.id] || "";
+                    const isPartiallyPaid = item.paidAmount > 0;
 
                     return (
                       <div
@@ -340,9 +379,14 @@ export default function RecordPaymentModal() {
                             <span className="text-[10px] text-[#8DA6BC]">
                               ({item.quantity} {item.unit} @ Rs. {item.unitPrice.toLocaleString()}/{item.unit})
                             </span>
+                            {isPartiallyPaid && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                Partial (Paid Rs. {item.paidAmount.toLocaleString()})
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-[#556B82] mt-0.5">
-                            Original: Rs. {item.lineTotal.toLocaleString()} • Remaining:{" "}
+                            Original: Rs. {item.lineTotal.toLocaleString()} • Remaining Due:{" "}
                             <strong className="text-kf-orange">
                               Rs. {item.remainingBalance.toLocaleString()}
                             </strong>
@@ -366,12 +410,10 @@ export default function RecordPaymentModal() {
                           </div>
                           <button
                             type="button"
-                            onClick={() =>
-                              handleItemAllocationChange(item.id, item.remainingBalance.toString())
-                            }
+                            onClick={() => handlePayDue(item.id, item.remainingBalance)}
                             className="px-2 py-1 text-[10px] bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#556B82] font-bold rounded cursor-pointer whitespace-nowrap"
                           >
-                            Pay Full
+                            Pay Due
                           </button>
                         </div>
                       </div>
