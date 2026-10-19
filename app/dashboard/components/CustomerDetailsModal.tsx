@@ -1,0 +1,213 @@
+"use client";
+
+import React, { useEffect } from "react";
+import { useDashboard } from "../context/DashboardContext";
+
+interface CustomerDetailsModalProps {
+  customerId: string | null;
+  onClose: () => void;
+}
+
+export default function CustomerDetailsModal({ customerId, onClose }: CustomerDetailsModalProps) {
+  const { getCustomerWithBalance, getCustomerLedger, openModal } = useDashboard();
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && customerId) {
+        onClose();
+      }
+    }
+    if (customerId) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [customerId, onClose]);
+
+  if (!customerId) return null;
+
+  const customer = getCustomerWithBalance(customerId);
+  if (!customer) return null;
+
+  const ledger = getCustomerLedger(customerId);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="customer-details-title"
+    >
+      <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-[#EADBCA] overflow-hidden">
+        {/* Header */}
+        <div className="p-5 sm:p-6 bg-[#FCF7F0] border-b border-[#F0E4D4] flex items-start justify-between">
+          <div className="flex items-center gap-3.5 min-w-0 flex-1 mr-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-extrabold text-base shadow-sm flex-shrink-0">
+              {customer.name.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="customer-details-title" className="text-lg sm:text-xl font-extrabold text-kf-navy truncate">
+                  {customer.name}
+                </h2>
+                <span
+                  className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    customer.currentBalance === 0
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
+                  }`}
+                >
+                  {customer.currentBalance === 0 ? "Account Cleared" : "Has Udhaar"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#556B82] mt-1">
+                <span className="flex items-center gap-1 font-semibold text-kf-navy">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  {customer.phone}
+                </span>
+                <span className="truncate">• {customer.address}</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            className="p-1.5 rounded-lg text-[#556B82] hover:bg-[#F0E4D4] hover:text-kf-navy transition-colors cursor-pointer"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Balance Metrics Strip */}
+        <div className="grid grid-cols-3 divide-x divide-[#F0E4D4] border-b border-[#F0E4D4] bg-white text-center p-3">
+          <div className="px-2">
+            <span className="text-[10px] uppercase font-bold text-[#8DA6BC] tracking-wider block">
+              Total Purchases
+            </span>
+            <span className="text-sm font-extrabold text-kf-navy">
+              Rs. {(customer.openingBalance + customer.totalCredit).toLocaleString()}
+            </span>
+          </div>
+          <div className="px-2">
+            <span className="text-[10px] uppercase font-bold text-green-600 tracking-wider block">
+              Total Paid
+            </span>
+            <span className="text-sm font-extrabold text-green-700">
+              Rs. {customer.totalPaid.toLocaleString()}
+            </span>
+          </div>
+          <div className="px-2">
+            <span className="text-[10px] uppercase font-bold text-kf-orange tracking-wider block">
+              Current Due
+            </span>
+            <span className="text-base font-extrabold text-kf-orange">
+              Rs. {customer.currentBalance.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Action Buttons */}
+        <div className="px-6 py-3 bg-[#FFFDFB] border-b border-[#F0E4D4] flex items-center justify-between gap-3">
+          <div className="text-xs font-bold text-kf-navy">Khata Actions:</div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openModal("credit", customer.id);
+              }}
+              className="px-3 py-1.5 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-lg border border-[#FFD9B3] transition-colors cursor-pointer"
+            >
+              + Give Credit
+            </button>
+            <button
+              type="button"
+              disabled={customer.currentBalance <= 0}
+              onClick={() => {
+                onClose();
+                openModal("payment", customer.id);
+              }}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              ↓ Receive Payment
+            </button>
+          </div>
+        </div>
+
+        {/* Ledger History List */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+          <div className="flex items-center justify-between text-xs font-bold text-kf-navy pb-1">
+            <span>Transaction Ledger History</span>
+            <span className="text-[11px] text-[#556B82] font-semibold">
+              Opening Balance: Rs. {customer.openingBalance.toLocaleString()}
+            </span>
+          </div>
+
+          {ledger.length === 0 ? (
+            <div className="text-center py-8 text-xs text-[#556B82] bg-[#FAF3E8] rounded-2xl border border-[#EADBCA] p-6">
+              No transactions recorded yet for this customer.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {ledger.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="p-3 rounded-xl border border-[#F0E4D4] bg-[#FCF8F2] flex items-center justify-between gap-3 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          tx.type === "credit"
+                            ? "bg-orange-100 text-kf-orange"
+                            : "bg-green-100 text-green-700"
+                        }`}
+                      >
+                        {tx.type === "credit" ? "Udhaar Given" : "Payment Received"}
+                      </span>
+                      <span className="text-[11px] text-[#8DA6BC] font-medium">{tx.date}</span>
+                      {tx.receiptNo && (
+                        <span className="text-[10px] text-[#8DA6BC]">#{tx.receiptNo}</span>
+                      )}
+                    </div>
+                    <p className="text-kf-navy font-semibold truncate">{tx.description}</p>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <div
+                      className={`font-extrabold ${
+                        tx.type === "credit" ? "text-kf-orange" : "text-green-600"
+                      }`}
+                    >
+                      {tx.type === "credit" ? "+" : "-"} Rs. {tx.amount.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-[#556B82]">
+                      Bal: Rs. {tx.runningBalance.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-[#FCF7F0] border-t border-[#F0E4D4] flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 bg-kf-navy hover:bg-[#163B5C] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

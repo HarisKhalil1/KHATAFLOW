@@ -1,26 +1,172 @@
 @import "tailwindcss";
 
+/* ==========================================
+   KhataFlow Design System — Brand Tokens
+   ========================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand Colors */
+  --kf-orange: #FF6A00;
+  --kf-orange-hover: #E85E00;
+  --kf-orange-light: #FFF0E0;
+  --kf-orange-50: #FFF7ED;
+  --kf-navy: #0F283E;
+  --kf-navy-light: #163B5C;
+  --kf-cream: #FCF4EB;
+  --kf-cream-dark: #F5E8D6;
+  --kf-white: #FFFFFF;
+  --kf-warm-white: #FAF3E8;
+  --kf-muted: #556B82;
+  --kf-border: #EADBCA;
+  --kf-border-light: #F0E4D4;
+  --kf-success: #22C55E;
+  --kf-danger: #EF4444;
+
+  /* Typography */
+  --kf-font-sans: 'Inter', var(--font-inter), system-ui, -apple-system, sans-serif;
+
+  /* Shadows */
+  --kf-shadow-sm: 0 1px 2px rgba(16, 53, 82, 0.05);
+  --kf-shadow-md: 0 4px 12px rgba(16, 53, 82, 0.08);
+  --kf-shadow-lg: 0 8px 30px rgba(16, 53, 82, 0.12);
+  --kf-shadow-xl: 0 16px 50px rgba(16, 53, 82, 0.15);
+  --kf-shadow-card: 0 2px 8px rgba(16, 53, 82, 0.06), 0 0 1px rgba(16, 53, 82, 0.1);
+
+  /* Radii */
+  --kf-radius-sm: 6px;
+  --kf-radius-md: 10px;
+  --kf-radius-lg: 14px;
+  --kf-radius-xl: 20px;
+
+  /* Transitions */
+  --kf-transition-fast: 150ms ease;
+  --kf-transition-base: 250ms ease;
+  --kf-transition-slow: 400ms ease;
 }
 
+/* Tailwind v4 theme inline tokens */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-kf-orange: var(--kf-orange);
+  --color-kf-orange-hover: var(--kf-orange-hover);
+  --color-kf-orange-light: var(--kf-orange-light);
+  --color-kf-orange-50: var(--kf-orange-50);
+  --color-kf-navy: var(--kf-navy);
+  --color-kf-navy-light: var(--kf-navy-light);
+  --color-kf-cream: var(--kf-cream);
+  --color-kf-cream-dark: var(--kf-cream-dark);
+  --color-kf-white: var(--kf-white);
+  --color-kf-warm-white: var(--kf-warm-white);
+  --color-kf-muted: var(--kf-muted);
+  --color-kf-border: var(--kf-border);
+  --color-kf-border-light: var(--kf-border-light);
+  --color-kf-success: var(--kf-success);
+  --color-kf-danger: var(--kf-danger);
+
+  --font-sans: var(--kf-font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--kf-font-sans);
+  color: var(--kf-navy);
+  background-color: var(--kf-warm-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* Remove dark mode — KhataFlow is warm/light themed */
+
+/* ==========================================
+   Focus Styles (Accessibility)
+   ========================================== */
+
+:focus-visible {
+  outline: 2px solid var(--kf-orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================
+   Smooth scroll for reduced-motion users
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================
+   Custom Scrollbar
+   ========================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--kf-cream);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--kf-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--kf-muted);
+}
+
+/* ==========================================
+   Selection Color
+   ========================================== */
+
+::selection {
+  background-color: var(--kf-orange-light);
+  color: var(--kf-navy);
+}
+
+/* ==========================================
+   Utility Classes
+   ========================================== */
+
+.kf-container {
+  width: 100%;
+  max-width: 1320px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .kf-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .kf-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+.font-urdu {
+  font-family: 'Segoe UI', Tahoma, 'Noto Nastaliq Urdu', 'Noto Sans Arabic', system-ui, sans-serif;
 }

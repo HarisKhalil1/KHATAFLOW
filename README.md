@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KhataFlow — Khata • Sales • Growth
 
-## Getting Started
+> **Digital Khata & Business Management Platform** designed for small shopkeepers, initially targeting retail businesses in Peshawar, Pakistan.
 
-First, run the development server:
+---
+
+## 🚀 Phase 1A: Frontend Foundation, Landing Page, Hero & Login UI
+
+Phase 1A provides a clean, responsive, production-quality frontend foundation matching the product design reference:
+
+- **Brand Design System**: Curated color tokens (Warm cream `#FFF7EC`, Vibrant Orange `#FF6A00`, Deep Navy `#103552`), Inter typography, smooth shadows, and accessible focus states.
+- **Header & Navigation**: Brand logo with shop awning icon, navigation links (`Home`, `Features`, `About`), and language switcher (`EN` / `اردو`).
+- **Hero Section**:
+  - High-impact headline: *"Turn scattered business records into one simple digital workspace."*
+  - Supporting copy in Urdu/English mix: *"Customers ka khata, udhaar, payments, expenses aur reports — sab kuch ek jagah."*
+  - Call-to-action buttons: *Get Started* & *Learn More*.
+  - Trust and location badges: *Peshawar, Khyber Pakhtunkhwa*, *Made for small shops*, *Easy to use*, *Secure*.
+  - 3D shop illustration with currency badge.
+  - Interactive **Login Card** with Shop Owner vs. Super Admin role toggle, form fields, remember me, forgot password, and responsive status indicators.
+- **Key Features Grid**: 6 core product highlights (Customer Management, Digital Khata, Payments & Credit, Expense Tracking, Reports & Analytics, Shop Dashboard).
+- **About Section**: Mission statement and key platform statistics.
+- **Footer**: Brand links, support directory, tech stack badges, and copyright.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js](https://nextjs.org) (App Router, Turbopack)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4 with custom design tokens in `app/globals.css`
+- **Typography**: Google Fonts Inter
+
+---
+
+## 💻 Getting Started
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - Starts development server on port 3000
+- `npm run build` - Validates TypeScript and creates production build
+- `npm run lint` - Runs ESLint checks
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
