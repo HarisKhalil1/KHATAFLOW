@@ -5,7 +5,7 @@ import React, { createContext, useContext, useState, useMemo, useCallback, useEf
 export type TransactionType = "credit" | "payment" | "adjustment";
 export type ExpenseCategory = "Inventory" | "Rent" | "Utilities" | "Transport" | "Staff" | "Other";
 export type PaymentMethod = "Cash" | "Bank Transfer" | "JazzCash" | "EasyPaisa";
-export type CustomerStatus = "active" | "cleared" | "overdue";
+export type CustomerStatus = "active" | "cleared" | "overdue" | "archived";
 
 export interface Customer {
   id: string;
@@ -16,6 +16,9 @@ export interface Customer {
   openingBalance: number;
   createdAt: string;
   notes?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
+  archiveReason?: string;
 }
 
 export interface BillItem {
@@ -207,6 +210,8 @@ interface DashboardContextType {
 
   // Computed
   customersWithBalances: CustomerWithBalance[];
+  archivedCustomers: CustomerWithBalance[];
+  allCustomersWithBalances: CustomerWithBalance[];
   totalOutstandingCredit: number;
   totalCustomersCount: number;
   activeDebtorsCount: number;
@@ -214,6 +219,32 @@ interface DashboardContextType {
   getCustomerLedger: (customerId: string) => LedgerEntryWithRunningBalance[];
   getCustomerBills: (customerId: string) => CustomerBill[];
   getCustomerBill: (customerId: string, billId?: string) => CustomerBill | undefined;
+  getCustomerFinancialSummary: (customerId: string) => {
+    billsCount: number;
+    transactionsCount: number;
+    adjustmentsCount: number;
+    currentBalance: number;
+    totalCredit: number;
+    totalPaid: number;
+    hasFinancialHistory: boolean;
+  };
+
+  // Safe Customer Lifecycle Actions
+  archiveCustomer: (customerId: string, reason?: string) => { success: boolean; error?: string };
+  restoreCustomer: (customerId: string) => { success: boolean; error?: string };
+  deleteCustomer: (
+    customerId: string,
+    force?: boolean
+  ) => {
+    success: boolean;
+    error?: string;
+    mode?: "permanent_empty" | "permanent_forced";
+    hasFinancialRecords?: boolean;
+  };
+  updateCustomer: (
+    customerId: string,
+    data: { name?: string; phone?: string; address?: string; notes?: string }
+  ) => { success: boolean; error?: string; customer?: Customer };
 
   // Item-wise Validation & Actions
   validateItemAdjustment: (
@@ -295,9 +326,27 @@ interface DashboardContextType {
   };
 
   // Active Modals Control
-  activeModal: "payment" | "credit" | "customer" | "expense" | "item-adjust" | null;
+  activeModal:
+    | "payment"
+    | "credit"
+    | "customer"
+    | "expense"
+    | "item-adjust"
+    | "delete-customer"
+    | "edit-customer"
+    | null;
   selectedCustomerIdForModal: string | null;
-  openModal: (type: "payment" | "credit" | "customer" | "expense" | "item-adjust", customerId?: string) => void;
+  openModal: (
+    type:
+      | "payment"
+      | "credit"
+      | "customer"
+      | "expense"
+      | "item-adjust"
+      | "delete-customer"
+      | "edit-customer",
+    customerId?: string
+  ) => void;
   closeModal: () => void;
 }
 
@@ -858,21 +907,44 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, [isHydrated, customers, bills, adjustments, transactions, expenses, notifications, products]);
 
   // Modal control
-  const [activeModal, setActiveModal] = useState<"payment" | "credit" | "customer" | "expense" | "item-adjust" | null>(null);
+  // Modal control
+  const [activeModal, setActiveModal] = useState<
+    | "payment"
+    | "credit"
+    | "customer"
+    | "expense"
+    | "item-adjust"
+    | "delete-customer"
+    | "edit-customer"
+    | null
+  >(null);
   const [selectedCustomerIdForModal, setSelectedCustomerIdForModal] = useState<string | null>(null);
 
-  const openModal = useCallback((type: "payment" | "credit" | "customer" | "expense" | "item-adjust", customerId?: string) => {
-    setActiveModal(type);
-    setSelectedCustomerIdForModal(customerId || null);
-  }, []);
+  const openModal = useCallback(
+    (
+      type:
+        | "payment"
+        | "credit"
+        | "customer"
+        | "expense"
+        | "item-adjust"
+        | "delete-customer"
+        | "edit-customer",
+      customerId?: string
+    ) => {
+      setActiveModal(type);
+      setSelectedCustomerIdForModal(customerId || null);
+    },
+    []
+  );
 
   const closeModal = useCallback(() => {
     setActiveModal(null);
     setSelectedCustomerIdForModal(null);
   }, []);
 
-  // Compute customer balances with strict mathematical integrity
-  const customersWithBalances = useMemo<CustomerWithBalance[]>(() => {
+  // Compute customer balances for ALL customers (both active & archived)
+  const allCustomersWithBalances = useMemo<CustomerWithBalance[]>(() => {
     return customers.map((c) => {
       const custTxs = transactions.filter((t) => t.customerId === c.id);
 
@@ -898,9 +970,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const currentBalance = netOwed > 0 ? netOwed : 0;
       const customerCredit = netOwed < 0 ? Math.abs(netOwed) : 0;
 
-      // Update status dynamically
-      let dynamicStatus = c.status;
-      if (currentBalance === 0) {
+      // Update status dynamically: "archived" takes precedence if soft-deleted
+      let dynamicStatus: CustomerStatus = c.status;
+      if (c.isArchived) {
+        dynamicStatus = "archived";
+      } else if (currentBalance === 0) {
         dynamicStatus = "cleared";
       } else if (dynamicStatus === "cleared" && currentBalance > 0) {
         dynamicStatus = "active";
@@ -919,11 +993,21 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     });
   }, [customers, transactions]);
 
+  // Active customers with balances (excluding archived accounts)
+  const customersWithBalances = useMemo<CustomerWithBalance[]>(() => {
+    return allCustomersWithBalances.filter((c) => !c.isArchived);
+  }, [allCustomersWithBalances]);
+
+  // Archived customers with balances
+  const archivedCustomers = useMemo<CustomerWithBalance[]>(() => {
+    return allCustomersWithBalances.filter((c) => !!c.isArchived);
+  }, [allCustomersWithBalances]);
+
   const totalOutstandingCredit = useMemo(() => {
     return customersWithBalances.reduce((sum, c) => sum + c.currentBalance, 0);
   }, [customersWithBalances]);
 
-  const totalCustomersCount = customers.length;
+  const totalCustomersCount = customersWithBalances.length;
 
   const activeDebtorsCount = useMemo(() => {
     return customersWithBalances.filter((c) => c.currentBalance > 0).length;
@@ -933,11 +1017,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     return notifications.filter((n) => !n.read).length;
   }, [notifications]);
 
+  // Search across all customers (active & archived) so statements & ledgers remain accessible
   const getCustomerWithBalance = useCallback(
     (id: string) => {
-      return customersWithBalances.find((c) => c.id === id);
+      return allCustomersWithBalances.find((c) => c.id === id);
     },
-    [customersWithBalances]
+    [allCustomersWithBalances]
   );
 
   const getCustomerBills = useCallback(
@@ -1449,6 +1534,232 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // Get Customer Financial Summary (for safe deletion/archiving checks)
+  const getCustomerFinancialSummary = useCallback(
+    (customerId: string) => {
+      const cust = allCustomersWithBalances.find((c) => c.id === customerId);
+      const custBills = bills.filter((b) => b.customerId === customerId);
+      const custTxs = transactions.filter((t) => t.customerId === customerId);
+      const custAdjs = adjustments.filter((a) => a.customerId === customerId);
+
+      const hasFinancialHistory =
+        custBills.length > 0 ||
+        custTxs.length > 0 ||
+        custAdjs.length > 0 ||
+        (cust?.openingBalance ? cust.openingBalance > 0 : false);
+
+      return {
+        billsCount: custBills.length,
+        transactionsCount: custTxs.length,
+        adjustmentsCount: custAdjs.length,
+        currentBalance: cust?.currentBalance || 0,
+        totalCredit: cust?.totalCredit || 0,
+        totalPaid: cust?.totalPaid || 0,
+        hasFinancialHistory,
+      };
+    },
+    [allCustomersWithBalances, bills, transactions, adjustments]
+  );
+
+  // Safe Archive Customer (Soft-Delete)
+  const archiveCustomer = useCallback(
+    (customerId: string, reason?: string) => {
+      const cust = customers.find((c) => c.id === customerId);
+      if (!cust) {
+        return { success: false, error: "Customer not found." };
+      }
+
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === customerId
+            ? {
+                ...c,
+                isArchived: true,
+                archivedAt: new Date().toISOString(),
+                archiveReason: reason?.trim() || "Archived by shopkeeper",
+                status: "archived" as CustomerStatus,
+              }
+            : c
+        )
+      );
+
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: "Customer Archived",
+          message: `${cust.name} was safely archived. All historical ledger records and bills are preserved.`,
+          time: "Just now",
+          type: "info",
+          read: false,
+        },
+        ...prev,
+      ]);
+
+      return { success: true };
+    },
+    [customers]
+  );
+
+  // Restore Customer
+  const restoreCustomer = useCallback(
+    (customerId: string) => {
+      const cust = customers.find((c) => c.id === customerId);
+      if (!cust) {
+        return { success: false, error: "Customer not found." };
+      }
+
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === customerId
+            ? {
+                ...c,
+                isArchived: false,
+                archivedAt: undefined,
+                archiveReason: undefined,
+                status: "active" as CustomerStatus,
+              }
+            : c
+        )
+      );
+
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: "Customer Restored",
+          message: `${cust.name} has been restored to active customers.`,
+          time: "Just now",
+          type: "info",
+          read: false,
+        },
+        ...prev,
+      ]);
+
+      return { success: true };
+    },
+    [customers]
+  );
+
+  // Delete Customer (Permanent delete for empty customers, or forced delete with confirmation)
+  const deleteCustomer = useCallback(
+    (customerId: string, force?: boolean) => {
+      const cust = customers.find((c) => c.id === customerId);
+      if (!cust) {
+        return { success: false, error: "Customer not found." };
+      }
+
+      const custBills = bills.filter((b) => b.customerId === customerId);
+      const custTxs = transactions.filter((t) => t.customerId === customerId);
+      const custAdjs = adjustments.filter((a) => a.customerId === customerId);
+      const hasFinancialRecords =
+        custBills.length > 0 ||
+        custTxs.length > 0 ||
+        custAdjs.length > 0 ||
+        (cust.openingBalance && cust.openingBalance > 0);
+
+      if (hasFinancialRecords && !force) {
+        return {
+          success: false,
+          hasFinancialRecords: true,
+          error:
+            "This customer has financial records (bills, transactions, or balance). Use Archive Customer to preserve financial history.",
+        };
+      }
+
+      // Remove customer from customers list
+      setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+
+      if (force && hasFinancialRecords) {
+        // If permanent deletion was explicitly forced and confirmed with name verification,
+        // clean up that customer's dependent records ONLY. Never touch other customers.
+        setBills((prev) => prev.filter((b) => b.customerId !== customerId));
+        setTransactions((prev) => prev.filter((t) => t.customerId !== customerId));
+        setAdjustments((prev) => prev.filter((a) => a.customerId !== customerId));
+      }
+
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: "Customer Deleted",
+          message: `${cust.name} was permanently removed.`,
+          time: "Just now",
+          type: "alert" as const,
+          read: false,
+        },
+        ...prev,
+      ]);
+
+      return {
+        success: true,
+        mode: (hasFinancialRecords ? "permanent_forced" : "permanent_empty") as
+          | "permanent_empty"
+          | "permanent_forced",
+      };
+    },
+    [customers, bills, transactions, adjustments]
+  );
+
+  // Update Customer Details (Edit Customer)
+  const updateCustomer = useCallback(
+    (
+      customerId: string,
+      data: { name?: string; phone?: string; address?: string; notes?: string }
+    ) => {
+      const cust = customers.find((c) => c.id === customerId);
+      if (!cust) {
+        return { success: false, error: "Customer not found." };
+      }
+
+      if (data.name !== undefined) {
+        const trimmedName = data.name.trim();
+        if (!trimmedName || trimmedName.length < 2) {
+          return { success: false, error: "Customer name must be at least 2 characters long." };
+        }
+      }
+
+      if (data.phone !== undefined) {
+        const phoneRegex = /^((\+92)|(0092)|(0))?3[0-9]{2}-?[0-9]{7}$/;
+        if (!phoneRegex.test(data.phone.trim().replace(/\s+/g, ""))) {
+          return {
+            success: false,
+            error: "Please enter a valid Pakistani phone number (e.g., 0300-1234567 or 03211234567).",
+          };
+        }
+      }
+
+      const updatedCust: Customer = {
+        ...cust,
+        name: data.name !== undefined ? data.name.trim() : cust.name,
+        phone: data.phone !== undefined ? data.phone.trim() : cust.phone,
+        address: data.address !== undefined ? data.address.trim() : cust.address,
+        notes: data.notes !== undefined ? data.notes.trim() : cust.notes,
+      };
+
+      setCustomers((prev) => prev.map((c) => (c.id === customerId ? updatedCust : c)));
+
+      // If name changed, update bill customerName headers
+      if (data.name && data.name.trim() !== cust.name) {
+        setBills((prev) =>
+          prev.map((b) => (b.customerId === customerId ? { ...b, customerName: data.name!.trim() } : b))
+        );
+      }
+
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: "Customer Updated",
+          message: `${updatedCust.name} details were updated successfully.`,
+          time: "Just now",
+          type: "info",
+          read: false,
+        },
+        ...prev,
+      ]);
+
+      return { success: true, customer: updatedCust };
+    },
+    [customers]
+  );
+
   // Record Payment action with strict balance validation & item-level allocation
   const recordPayment = useCallback(
     (data: {
@@ -1460,10 +1771,19 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       description?: string;
       itemAllocations?: PaymentItemAllocation[];
     }) => {
-      const customer = customersWithBalances.find((c) => c.id === data.customerId);
-      if (!customer) {
+      const allCust = allCustomersWithBalances.find((c) => c.id === data.customerId);
+      if (!allCust) {
         return { success: false, error: "Customer not found." };
       }
+
+      if (allCust.isArchived) {
+        return {
+          success: false,
+          error: `Customer "${allCust.name}" is archived. Please restore the customer account before recording payments.`,
+        };
+      }
+
+      const customer = allCust;
 
       const numAmount = Number(data.amount);
       if (isNaN(numAmount) || numAmount <= 0) {
@@ -1627,6 +1947,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const customer = customers.find((c) => c.id === data.customerId);
       if (!customer) {
         return { success: false, error: "Customer not found." };
+      }
+
+      if (customer.isArchived) {
+        return {
+          success: false,
+          error: `Customer "${customer.name}" is archived. Please restore customer to record new credit.`,
+        };
       }
 
       let creditAmount = 0;
@@ -2029,6 +2356,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         notifications,
         unreadNotificationCount,
         customersWithBalances,
+        archivedCustomers,
+        allCustomersWithBalances,
         totalOutstandingCredit,
         totalCustomersCount,
         activeDebtorsCount,
@@ -2036,6 +2365,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         getCustomerLedger,
         getCustomerBills,
         getCustomerBill,
+        getCustomerFinancialSummary,
+        archiveCustomer,
+        restoreCustomer,
+        deleteCustomer,
+        updateCustomer,
         validateItemAdjustment,
         adjustBillItem,
         addCustomer,

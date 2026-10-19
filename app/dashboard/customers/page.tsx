@@ -5,14 +5,16 @@ import { useDashboard } from "../context/DashboardContext";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
 
 export default function CustomersAndKhataPage() {
-  const { customersWithBalances, openModal, getCustomerBill } = useDashboard();
+  const { customersWithBalances, archivedCustomers, openModal, getCustomerBill, restoreCustomer } = useDashboard();
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cleared">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cleared" | "archived">("all");
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<string | null>(null);
 
   // Filter customers
   const filteredCustomers = useMemo(() => {
-    return customersWithBalances.filter((c) => {
+    const sourceList = statusFilter === "archived" ? archivedCustomers : customersWithBalances;
+
+    return sourceList.filter((c) => {
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
         c.name.toLowerCase().includes(query) ||
@@ -25,7 +27,7 @@ export default function CustomersAndKhataPage() {
       if (statusFilter === "cleared") return c.currentBalance === 0;
       return true;
     });
-  }, [customersWithBalances, searchQuery, statusFilter]);
+  }, [customersWithBalances, archivedCustomers, searchQuery, statusFilter]);
 
   // Aggregate stats
   const stats = useMemo(() => {
@@ -139,7 +141,7 @@ export default function CustomersAndKhataPage() {
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 bg-[#F5ECE1] p-1 rounded-xl border border-[#EADBCA]">
+        <div className="flex items-center gap-1.5 bg-[#F5ECE1] p-1 rounded-xl border border-[#EADBCA] flex-wrap">
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
@@ -173,6 +175,18 @@ export default function CustomersAndKhataPage() {
           >
             Cleared ({stats.clearedCount})
           </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("archived")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              statusFilter === "archived"
+                ? "bg-white text-slate-800 shadow-xs"
+                : "text-[#556B82] hover:text-kf-navy"
+            }`}
+          >
+            <span>📦</span>
+            <span>Archived ({archivedCustomers.length})</span>
+          </button>
         </div>
       </div>
 
@@ -180,11 +194,15 @@ export default function CustomersAndKhataPage() {
       {filteredCustomers.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-[#EADBCA] shadow-xs">
           <div className="w-12 h-12 rounded-2xl bg-[#FFF2E5] text-kf-orange flex items-center justify-center mx-auto mb-3 font-bold text-xl">
-            ?
+            {statusFilter === "archived" ? "📦" : "?"}
           </div>
-          <h3 className="text-base font-extrabold text-kf-navy mb-1">No customers found</h3>
+          <h3 className="text-base font-extrabold text-kf-navy mb-1">
+            {statusFilter === "archived" ? "No archived customers" : "No customers found"}
+          </h3>
           <p className="text-xs text-[#556B82] max-w-sm mx-auto mb-4">
-            No customers match &quot;{searchQuery}&quot;. Try a different search term or add a new customer.
+            {statusFilter === "archived"
+              ? "When customers are safely archived, they appear here preserving their full history."
+              : `No customers match "${searchQuery}". Try a different search term or add a new customer.`}
           </p>
           <button
             type="button"
@@ -194,24 +212,35 @@ export default function CustomersAndKhataPage() {
             }}
             className="px-4 py-2 bg-[#F5ECE1] text-kf-navy font-bold text-xs rounded-xl hover:bg-[#EADBCA] transition-colors cursor-pointer"
           >
-            Clear Search Filter
+            Clear Filter
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {filteredCustomers.map((customer) => {
             const hasBill = !!getCustomerBill(customer.id);
+            const isArchived = !!customer.isArchived;
 
             return (
               <div
                 key={customer.id}
-                className="bg-white rounded-2xl p-4 sm:p-5 border border-[#EADBCA] shadow-xs hover:border-kf-orange/40 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+                className={`bg-white rounded-2xl p-4 sm:p-5 border shadow-xs transition-all flex flex-col justify-between overflow-hidden ${
+                  isArchived
+                    ? "border-slate-300 bg-slate-50/20"
+                    : "border-[#EADBCA] hover:border-kf-orange/40 hover:shadow-md"
+                }`}
               >
                 <div>
-                  {/* Header with Avatar, Name, Phone and Status Badge */}
-                  <div className="flex items-start justify-between gap-2.5 mb-3">
+                  {/* Header with Avatar, Name, Phone, Actions & Badge */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0">
+                      <div
+                        className={`w-10 h-10 rounded-xl text-white flex items-center justify-center font-extrabold text-xs shadow-xs flex-shrink-0 ${
+                          isArchived
+                            ? "bg-slate-500"
+                            : "bg-gradient-to-tr from-[#0F283E] to-[#1E4B72]"
+                        }`}
+                      >
                         {customer.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -227,15 +256,40 @@ export default function CustomersAndKhataPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold whitespace-nowrap self-start ${
-                        customer.currentBalance === 0
-                          ? "bg-green-50 text-green-700 border border-green-200"
-                          : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
-                      }`}
-                    >
-                      {customer.currentBalance === 0 ? "Cleared" : "Has Udhaar"}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {/* Edit Button */}
+                      <button
+                        type="button"
+                        onClick={() => openModal("edit-customer", customer.id)}
+                        title="Edit customer details"
+                        className="p-1 text-[#8DA6BC] hover:text-kf-navy hover:bg-[#F5ECE1] rounded-lg transition-colors cursor-pointer"
+                      >
+                        <span className="text-xs">✏️</span>
+                      </button>
+
+                      {/* Delete / Archive Button */}
+                      <button
+                        type="button"
+                        onClick={() => openModal("delete-customer", customer.id)}
+                        title={isArchived ? "Delete permanently" : "Archive or delete customer"}
+                        className="p-1 text-[#8DA6BC] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <span className="text-xs">🗑️</span>
+                      </button>
+
+                      {/* Status Badge */}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold whitespace-nowrap ${
+                          isArchived
+                            ? "bg-slate-100 text-slate-700 border border-slate-300"
+                            : customer.currentBalance === 0
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
+                        }`}
+                      >
+                        {isArchived ? "Archived" : customer.currentBalance === 0 ? "Cleared" : "Has Udhaar"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Address */}
@@ -256,6 +310,18 @@ export default function CustomersAndKhataPage() {
                     </svg>
                     <span className="truncate">{customer.address}</span>
                   </div>
+
+                  {/* If Archived, show archived info banner */}
+                  {isArchived && (
+                    <div className="p-2 bg-slate-100 border border-slate-200 rounded-xl mb-3 text-[11px] text-slate-700">
+                      <span className="font-bold">📦 Preserved in Archive</span>
+                      {customer.archiveReason && (
+                        <span className="block text-[10px] text-slate-500 mt-0.5 truncate">
+                          Reason: {customer.archiveReason}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Balance Due Box */}
                   <div className="p-3 bg-[#FCF8F2] rounded-xl border border-[#F0E4D4] mb-3.5 flex items-center justify-between">
@@ -282,51 +348,75 @@ export default function CustomersAndKhataPage() {
 
                 {/* Card Actions */}
                 <div className="space-y-2 pt-2 border-t border-[#F0E4D4]">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openModal("credit", customer.id)}
-                      className="py-2 px-2 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-xl border border-[#FFD9B3] transition-colors cursor-pointer text-center"
-                    >
-                      + Give Credit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={customer.currentBalance <= 0}
-                      onClick={() => openModal("payment", customer.id)}
-                      className="py-2 px-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-colors cursor-pointer text-center shadow-2xs"
-                    >
-                      ↓ Receive
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCustomerForDetails(customer.id)}
-                      className="py-1.5 px-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
-                    >
-                      Khata Ledger
-                    </button>
-
-                    {hasBill ? (
+                  {isArchived ? (
+                    /* Archived Customer Actions */
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => openModal("item-adjust", customer.id)}
-                        className="py-1.5 px-2 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#8C4B00] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                        onClick={() => restoreCustomer(customer.id)}
+                        className="py-2 px-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer text-center flex items-center justify-center gap-1.5"
                       >
-                        ⚖️ Adjust Item
+                        <span>↺</span>
+                        <span>Restore Customer</span>
                       </button>
-                    ) : (
                       <button
                         type="button"
                         onClick={() => setSelectedCustomerForDetails(customer.id)}
-                        className="py-1.5 px-2 bg-white hover:bg-[#FAF3E8] text-[#556B82] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                        className="py-2 px-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
                       >
-                        View Account
+                        Khata Ledger
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    /* Active Customer Actions */
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openModal("credit", customer.id)}
+                          className="py-2 px-2 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-xl border border-[#FFD9B3] transition-colors cursor-pointer text-center"
+                        >
+                          + Give Credit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={customer.currentBalance <= 0}
+                          onClick={() => openModal("payment", customer.id)}
+                          className="py-2 px-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl transition-colors cursor-pointer text-center shadow-2xs"
+                        >
+                          ↓ Receive
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCustomerForDetails(customer.id)}
+                          className="py-1.5 px-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                        >
+                          Khata Ledger
+                        </button>
+
+                        {hasBill ? (
+                          <button
+                            type="button"
+                            onClick={() => openModal("item-adjust", customer.id)}
+                            className="py-1.5 px-2 bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#8C4B00] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                          >
+                            ⚖️ Adjust Item
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomerForDetails(customer.id)}
+                            className="py-1.5 px-2 bg-white hover:bg-[#FAF3E8] text-[#556B82] border border-[#EADBCA] text-[11px] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                          >
+                            View Account
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );

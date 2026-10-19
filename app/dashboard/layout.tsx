@@ -12,6 +12,8 @@ import AddCreditModal from "./components/AddCreditModal";
 import AddCustomerModal from "./components/AddCustomerModal";
 import AddExpenseModal from "./components/AddExpenseModal";
 import ItemAdjustmentModal from "./components/ItemAdjustmentModal";
+import DeleteCustomerModal from "./components/DeleteCustomerModal";
+import EditCustomerModal from "./components/EditCustomerModal";
 
 function DashboardModals() {
   const { activeModal } = useDashboard();
@@ -22,6 +24,8 @@ function DashboardModals() {
       {activeModal === "customer" && <AddCustomerModal />}
       {activeModal === "expense" && <AddExpenseModal />}
       {activeModal === "item-adjust" && <ItemAdjustmentModal />}
+      {activeModal === "delete-customer" && <DeleteCustomerModal />}
+      {activeModal === "edit-customer" && <EditCustomerModal />}
     </>
   );
 }

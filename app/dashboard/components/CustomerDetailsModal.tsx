@@ -15,7 +15,7 @@ interface CustomerDetailsModalProps {
 }
 
 export default function CustomerDetailsModal({ customerId, onClose }: CustomerDetailsModalProps) {
-  const { getCustomerWithBalance, getCustomerLedger, getCustomerBill, openModal } = useDashboard();
+  const { getCustomerWithBalance, getCustomerLedger, getCustomerBill, openModal, restoreCustomer } = useDashboard();
   const [whatsAppModal, setWhatsAppModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -149,12 +149,14 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
                 </h2>
                 <span
                   className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    customer.currentBalance === 0
+                    customer.isArchived
+                      ? "bg-slate-100 text-slate-700 border border-slate-300"
+                      : customer.currentBalance === 0
                       ? "bg-green-50 text-green-700 border border-green-200"
                       : "bg-[#FFF4EB] text-kf-orange border border-[#FFD9B3]"
                   }`}
                 >
-                  {customer.currentBalance === 0 ? "Account Cleared" : "Has Udhaar"}
+                  {customer.isArchived ? "Archived Account" : customer.currentBalance === 0 ? "Account Cleared" : "Has Udhaar"}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#556B82] mt-1">
@@ -169,18 +171,67 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close details"
-            className="p-1.5 rounded-lg text-[#556B82] hover:bg-[#F0E4D4] hover:text-kf-navy transition-colors cursor-pointer"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Edit Button */}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openModal("edit-customer", customer.id);
+              }}
+              title="Edit customer details"
+              className="p-1.5 rounded-lg text-[#556B82] hover:bg-[#F0E4D4] hover:text-kf-navy transition-colors cursor-pointer"
+            >
+              <span className="text-sm">✏️</span>
+            </button>
+
+            {/* Archive / Delete Button */}
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openModal("delete-customer", customer.id);
+              }}
+              title={customer.isArchived ? "Delete permanently" : "Archive or delete customer"}
+              className="p-1.5 rounded-lg text-[#556B82] hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer"
+            >
+              <span className="text-sm">🗑️</span>
+            </button>
+
+            {/* Close */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close details"
+              className="p-1.5 rounded-lg text-[#556B82] hover:bg-[#F0E4D4] hover:text-kf-navy transition-colors cursor-pointer"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* If Archived, show banner */}
+        {customer.isArchived && (
+          <div className="p-3 bg-amber-50 border-b border-amber-200 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-950 font-semibold">
+            <div className="flex items-center gap-2">
+              <span>📦</span>
+              <span>
+                Account is <strong>Archived</strong>. New transactions disabled. Ledger history preserved.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => restoreCustomer(customer.id)}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-2xs self-start sm:self-auto"
+            >
+              <span>↺</span>
+              <span>Restore Customer</span>
+            </button>
+          </div>
+        )}
 
         {/* Balance Metrics Strip */}
         <div className="grid grid-cols-3 divide-x divide-[#F0E4D4] border-b border-[#F0E4D4] bg-white text-center p-3">
@@ -228,21 +279,24 @@ export default function CustomerDetailsModal({ customerId, onClose }: CustomerDe
             )}
             <button
               type="button"
+              disabled={customer.isArchived}
               onClick={() => {
                 onClose();
                 openModal("credit", customer.id);
               }}
-              className="px-3 py-1.5 bg-[#FFF2E5] hover:bg-[#FFE5CC] text-kf-orange text-xs font-bold rounded-lg border border-[#FFD9B3] transition-colors cursor-pointer"
+              title={customer.isArchived ? "Account is archived. Restore to give credit." : undefined}
+              className="px-3 py-1.5 bg-[#FFF2E5] hover:bg-[#FFE5CC] disabled:opacity-40 disabled:cursor-not-allowed text-kf-orange text-xs font-bold rounded-lg border border-[#FFD9B3] transition-colors cursor-pointer"
             >
               + Give Credit
             </button>
             <button
               type="button"
-              disabled={customer.currentBalance <= 0}
+              disabled={customer.isArchived || customer.currentBalance <= 0}
               onClick={() => {
                 onClose();
                 openModal("payment", customer.id);
               }}
+              title={customer.isArchived ? "Account is archived. Restore to receive payment." : undefined}
               className="px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
             >
               ↓ Receive Payment
