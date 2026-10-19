@@ -3,6 +3,15 @@
 import React, { useState } from "react";
 import { useDashboard, PaymentMethod, PaymentItemAllocation } from "../context/DashboardContext";
 
+function formatItemQuantityDisplay(qty: number, unit: string): string {
+  if (unit === "kg" || unit === "liters" || unit === "L") {
+    if (Math.abs(qty - 0.25) < 0.001) return `¼ ${unit} (0.25 ${unit})`;
+    if (Math.abs(qty - 0.5) < 0.001) return `½ ${unit} (0.5 ${unit})`;
+    if (Math.abs(qty - 0.75) < 0.001) return `¾ ${unit} (0.75 ${unit})`;
+  }
+  return `${qty} ${unit}`;
+}
+
 export default function RecordPaymentModal() {
   const {
     selectedCustomerIdForModal,
@@ -84,21 +93,24 @@ export default function RecordPaymentModal() {
 
   // Click price button "Pay Due" to allocate full remaining balance of an item
   const handlePayDue = (itemId: string, dueAmount: number) => {
-    const updated = {
-      ...itemAllocations,
-      [itemId]: dueAmount.toString(),
-    };
-    setItemAllocations(updated);
+    setItemAllocations((prev) => {
+      const updated = {
+        ...prev,
+        [itemId]: dueAmount.toString(),
+      };
 
-    // If amount is 0 or less than the total allocations, update amount automatically
-    const newTotalAlloc = Object.entries(updated).reduce((sum, [, val]) => {
-      const n = parseFloat(val) || 0;
-      return sum + (n > 0 ? n : 0);
-    }, 0);
+      const newTotalAlloc = Object.entries(updated).reduce((sum, [, val]) => {
+        const n = parseFloat(val) || 0;
+        return sum + (n > 0 ? n : 0);
+      }, 0);
 
-    if (numAmount < newTotalAlloc) {
-      setAmount(newTotalAlloc.toString());
-    }
+      setAmount((currAmount) => {
+        const curr = parseFloat(currAmount) || 0;
+        return curr < newTotalAlloc ? newTotalAlloc.toString() : currAmount;
+      });
+
+      return updated;
+    });
     setError(null);
   };
 
@@ -371,13 +383,16 @@ export default function RecordPaymentModal() {
                     return (
                       <div
                         key={item.id}
-                        className="p-2.5 bg-white rounded-xl border border-[#F0E4D4] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        className="p-3 bg-white rounded-xl border border-[#F0E4D4] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                       >
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-kf-navy">{item.name}</span>
-                            <span className="text-[10px] text-[#8DA6BC]">
-                              ({item.quantity} {item.unit} @ Rs. {item.unitPrice.toLocaleString()}/{item.unit})
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-kf-navy text-sm">{item.name}</span>
+                            <span className="text-[11px] font-bold text-[#556B82] bg-[#FAF3E8] px-2 py-0.5 rounded-md border border-[#EADBCA]">
+                              {formatItemQuantityDisplay(item.quantity, item.unit)}
+                            </span>
+                            <span className="text-[11px] text-[#556B82]">
+                              Original price: Rs. {item.unitPrice.toLocaleString()}/{item.unit}
                             </span>
                             {isPartiallyPaid && (
                               <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
@@ -385,11 +400,21 @@ export default function RecordPaymentModal() {
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-[#556B82] mt-0.5">
-                            Original: Rs. {item.lineTotal.toLocaleString()} • Remaining Due:{" "}
-                            <strong className="text-kf-orange">
-                              Rs. {item.remainingBalance.toLocaleString()}
-                            </strong>
+                          <div className="text-[11px] text-[#556B82] mt-1 flex items-center gap-3 flex-wrap">
+                            <span>
+                              Total: <strong className="text-kf-navy">Rs. {item.lineTotal.toLocaleString()}</strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Paid: <strong className="text-green-700">Rs. {item.paidAmount.toLocaleString()}</strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Outstanding:{" "}
+                              <strong className="text-kf-orange font-black">
+                                Rs. {item.remainingBalance.toLocaleString()}
+                              </strong>
+                            </span>
                           </div>
                         </div>
 
@@ -411,9 +436,9 @@ export default function RecordPaymentModal() {
                           <button
                             type="button"
                             onClick={() => handlePayDue(item.id, item.remainingBalance)}
-                            className="px-2 py-1 text-[10px] bg-[#FAF3E8] hover:bg-[#F0E4D4] text-[#556B82] font-bold rounded cursor-pointer whitespace-nowrap"
+                            className="px-2.5 py-1.5 text-[11px] bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy font-bold rounded-lg cursor-pointer whitespace-nowrap border border-[#EADBCA]"
                           >
-                            Pay Due
+                            Pay Due (Rs. {item.remainingBalance.toLocaleString()})
                           </button>
                         </div>
                       </div>

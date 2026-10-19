@@ -39,20 +39,25 @@ export interface StructuredPurchaseItemInput {
 }
 
 export interface ProductCatalogItem {
+  id?: string;
   name: string;
   defaultUnit: string;
   defaultRate: number;
+  category?: string;
 }
 
 export const STANDARD_PRODUCTS: ProductCatalogItem[] = [
-  { name: "Rice (Basmati)", defaultUnit: "kg", defaultRate: 2000 },
-  { name: "Dalda oil", defaultUnit: "kg", defaultRate: 3000 },
-  { name: "Eggs", defaultUnit: "pieces", defaultRate: 454.55 },
-  { name: "Sugar", defaultUnit: "kg", defaultRate: 160 },
-  { name: "Wheat Flour (Atta)", defaultUnit: "kg", defaultRate: 150 },
-  { name: "Tea (Tapal Danedar)", defaultUnit: "kg", defaultRate: 1600 },
-  { name: "Milk", defaultUnit: "liters", defaultRate: 220 },
-  { name: "Pulses (Daal Chana)", defaultUnit: "kg", defaultRate: 320 },
+  { id: "prod-rice-basmati", name: "Rice (Basmati)", defaultUnit: "kg", defaultRate: 200, category: "Grains" },
+  { id: "prod-rice", name: "Rice", defaultUnit: "kg", defaultRate: 200, category: "Grains" },
+  { id: "prod-dalda-oil", name: "Dalda oil", defaultUnit: "liters", defaultRate: 600, category: "Oils" },
+  { id: "prod-cooking-oil", name: "Cooking Oil", defaultUnit: "liters", defaultRate: 600, category: "Oils" },
+  { id: "prod-eggs", name: "Eggs", defaultUnit: "pieces", defaultRate: 30, category: "Dairy & Poultry" },
+  { id: "prod-chocolate", name: "Chocolate", defaultUnit: "pieces", defaultRate: 50, category: "Confectionery" },
+  { id: "prod-sugar", name: "Sugar", defaultUnit: "kg", defaultRate: 160, category: "Staples" },
+  { id: "prod-wheat-flour", name: "Wheat Flour (Atta)", defaultUnit: "kg", defaultRate: 150, category: "Flour" },
+  { id: "prod-tea", name: "Tea (Tapal Danedar)", defaultUnit: "kg", defaultRate: 1600, category: "Beverages" },
+  { id: "prod-milk", name: "Milk", defaultUnit: "liters", defaultRate: 220, category: "Dairy" },
+  { id: "prod-pulses", name: "Pulses (Daal Chana)", defaultUnit: "kg", defaultRate: 320, category: "Pulses" },
 ];
 
 export interface CustomerBill {
@@ -254,6 +259,18 @@ interface DashboardContextType {
 
   markNotificationsAsRead: () => void;
   resetDemoData: () => void;
+
+  // Product Catalog
+  products: ProductCatalogItem[];
+  addProduct: (product: { name: string; defaultUnit: string; defaultRate: number; category?: string }) => {
+    success: boolean;
+    product?: ProductCatalogItem;
+    error?: string;
+  };
+  updateProductPrice: (productName: string, newRate: number, newUnit?: string) => {
+    success: boolean;
+    error?: string;
+  };
 
   // Active Modals Control
   activeModal: "payment" | "credit" | "customer" | "expense" | "item-adjust" | null;
@@ -586,6 +603,7 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
+  const [products, setProducts] = useState<ProductCatalogItem[]>(() => STANDARD_PRODUCTS);
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
   const [bills, setBills] = useState<CustomerBill[]>(INITIAL_BILLS);
   const [adjustments, setAdjustments] = useState<ItemAdjustment[]>([]);
@@ -671,7 +689,27 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const getCustomerBill = useCallback(
     (customerId: string): CustomerBill | undefined => {
-      return bills.find((b) => b.customerId === customerId);
+      const custBills = bills.filter((b) => b.customerId === customerId);
+      if (custBills.length === 0) return undefined;
+      if (custBills.length === 1) return custBills[0];
+
+      // Consolidated bill representation for customer
+      const allItems = custBills.flatMap((b) => b.items);
+      const totalAmount = allItems.reduce((sum, it) => sum + it.lineTotal, 0);
+      const paidAmount = allItems.reduce((sum, it) => sum + it.paidAmount, 0);
+      return {
+        id: custBills[0].id,
+        billNo: custBills[0].billNo,
+        customerId,
+        customerName: custBills[0].customerName,
+        date: custBills[custBills.length - 1].date,
+        items: allItems,
+        totalAmount,
+        totalCost: custBills.reduce((sum, b) => sum + b.totalCost, 0),
+        paidAmount,
+        remainingBalance: Math.max(0, totalAmount - paidAmount),
+        notes: custBills.map((b) => b.notes).filter(Boolean).join("; "),
+      };
     },
     [bills]
   );
@@ -900,6 +938,86 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [validateItemAdjustment, customers, bills]
   );
 
+  // Product Catalog Actions
+  const addProduct = useCallback(
+    (data: { name: string; defaultUnit: string; defaultRate: number; category?: string }) => {
+      const trimmedName = data.name.trim();
+      if (!trimmedName) {
+        return { success: false, error: "Product name is required." };
+      }
+      const rate = Number(data.defaultRate);
+      if (isNaN(rate) || rate <= 0) {
+        return { success: false, error: "Default product rate must be greater than zero." };
+      }
+      const unit = data.defaultUnit.trim() || "pieces";
+
+      let createdOrUpdated: ProductCatalogItem;
+
+      setProducts((prev) => {
+        const existingIdx = prev.findIndex(
+          (p) => p.name.toLowerCase() === trimmedName.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          // Avoid unnecessary duplicates: update existing catalog entry
+          const updated = [...prev];
+          createdOrUpdated = {
+            ...updated[existingIdx],
+            defaultRate: rate,
+            defaultUnit: unit,
+            category: data.category || updated[existingIdx].category,
+          };
+          updated[existingIdx] = createdOrUpdated;
+          return updated;
+        } else {
+          // Add brand new product
+          createdOrUpdated = {
+            id: `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            name: trimmedName,
+            defaultUnit: unit,
+            defaultRate: rate,
+            category: data.category || "General",
+          };
+          return [...prev, createdOrUpdated];
+        }
+      });
+
+      return { success: true, product: createdOrUpdated! };
+    },
+    []
+  );
+
+  const updateProductPrice = useCallback(
+    (productName: string, newRate: number, newUnit?: string) => {
+      const trimmed = productName.trim().toLowerCase();
+      const rate = Number(newRate);
+      if (isNaN(rate) || rate <= 0) {
+        return { success: false, error: "New rate must be greater than zero." };
+      }
+
+      let found = false;
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.name.toLowerCase() === trimmed) {
+            found = true;
+            return {
+              ...p,
+              defaultRate: rate,
+              defaultUnit: newUnit ? newUnit.trim() : p.defaultUnit,
+            };
+          }
+          return p;
+        })
+      );
+
+      if (!found) {
+        return { success: false, error: `Product "${productName}" not found in catalog.` };
+      }
+
+      return { success: true };
+    },
+    []
+  );
+
   // Add Customer action
   const addCustomer = useCallback(
     (data: {
@@ -1006,10 +1124,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           };
         }
 
+        // Collect all items across all bills for this customer
+        const allCustItems = bills
+          .filter((b) => b.customerId === data.customerId)
+          .flatMap((b) => b.items);
+
         // Validate each allocation against item's remaining balance
         for (const alloc of data.itemAllocations) {
           if (alloc.allocatedAmount <= 0) continue;
-          const targetItem = customerBill.items.find((i) => i.id === alloc.itemId);
+          const targetItem = allCustItems.find((i) => i.id === alloc.itemId);
           if (!targetItem) {
             return {
               success: false,
@@ -1027,7 +1150,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         // Update bill items with allocations
         setBills((prevBills) =>
           prevBills.map((b) => {
-            if (b.id !== customerBill.id) return b;
+            if (b.customerId !== data.customerId) return b;
             const updatedItems = b.items.map((it) => {
               const matchedAlloc = data.itemAllocations?.find((a) => a.itemId === it.id);
               if (!matchedAlloc || matchedAlloc.allocatedAmount <= 0) return it;
@@ -1140,7 +1263,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
 
         creditAmount = data.items.reduce(
-          (sum, it) => sum + Math.round(Number(it.quantity) * Number(it.unitPrice)),
+          (sum, it) => sum + Math.round(Number(it.quantity) * Number(it.unitPrice) * 100) / 100,
           0
         );
 
@@ -1155,19 +1278,42 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         const createdBillItems: BillItem[] = data.items.map((it, idx) => {
           const qty = Number(it.quantity);
           const rate = Number(it.unitPrice);
-          const lineTotal = Math.round(qty * rate);
+          const lineTotal = Math.round(qty * rate * 100) / 100;
           return {
-            id: `item-${Date.now()}-${idx}`,
+            id: `item-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
             billId,
             name: it.name.trim(),
             quantity: qty,
-            unit: it.unit?.trim() || "kg",
+            unit: it.unit?.trim() || "pieces",
             unitPrice: rate,
-            unitCost: Math.round(rate * 0.78),
+            unitCost: Math.round(rate * 0.78 * 100) / 100,
             lineTotal,
             paidAmount: 0,
             remainingBalance: lineTotal,
           };
+        });
+
+        // Register any new custom products to catalog so they are available for future transactions
+        data.items.forEach((it) => {
+          const cleanName = it.name.trim();
+          if (cleanName) {
+            setProducts((prev) => {
+              const exists = prev.some((p) => p.name.toLowerCase() === cleanName.toLowerCase());
+              if (!exists) {
+                return [
+                  ...prev,
+                  {
+                    id: `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                    name: cleanName,
+                    defaultUnit: it.unit?.trim() || "pieces",
+                    defaultRate: Number(it.unitPrice) || 0,
+                    category: "General",
+                  },
+                ];
+              }
+              return prev;
+            });
+          }
         });
 
         if (existingBill) {
@@ -1206,7 +1352,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
 
         const itemsSummary = data.items
-          .map((i) => `${i.name} (${i.quantity} ${i.unit} @ Rs. ${i.unitPrice.toLocaleString()})`)
+          .map((i) => `${i.name} (${i.quantity} ${i.unit} @ Rs. ${i.unitPrice.toLocaleString()}/${i.unit})`)
           .join(", ");
 
         if (data.notes && data.notes.trim()) {
@@ -1460,6 +1606,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetDemoData = useCallback(() => {
+    setProducts(STANDARD_PRODUCTS);
     setCustomers(INITIAL_CUSTOMERS);
     setBills(INITIAL_BILLS);
     setAdjustments([]);
@@ -1472,6 +1619,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   return (
     <DashboardContext.Provider
       value={{
+        products,
+        addProduct,
+        updateProductPrice,
         customers,
         bills,
         adjustments,
