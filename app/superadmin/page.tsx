@@ -27,6 +27,9 @@ export default function SuperAdminPage() {
     suspendShop,
     restoreShop,
     verifyShopByAdmin,
+    ensureShopClaimCode,
+    isShopEligibleForDemoDelete,
+    deleteDemoShop,
   } = useShopRegistry();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,6 +40,7 @@ export default function SuperAdminPage() {
   const [selectedShopForDetails, setSelectedShopForDetails] = useState<RegisteredShop | null>(null);
   const [selectedShopForEdit, setSelectedShopForEdit] = useState<RegisteredShop | null>(null);
   const [selectedShopForSuspend, setSelectedShopForSuspend] = useState<RegisteredShop | null>(null);
+  const [selectedShopForDelete, setSelectedShopForDelete] = useState<RegisteredShop | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Form states for Create Shop
@@ -176,8 +180,37 @@ export default function SuperAdminPage() {
 
   // Copy helper
   const handleCopyCode = (code: string) => {
+    if (!code) return;
     navigator.clipboard.writeText(code);
     showToast(`Claim code "${code}" copied to clipboard!`);
+  };
+
+  // Open Details Modal and ensure claim code exists once in registry
+  const openDetailsModal = (shop: RegisteredShop) => {
+    const claimCode = ensureShopClaimCode(shop.id);
+    setSelectedShopForDetails({ ...shop, claimCode: claimCode || shop.claimCode });
+  };
+
+  // Active details shop synchronized with registry
+  const activeDetailsShop = useMemo(() => {
+    if (!selectedShopForDetails) return null;
+    return shops.find((s) => s.id === selectedShopForDetails.id) || selectedShopForDetails;
+  }, [selectedShopForDetails, shops]);
+
+  // Handle Demo Shop Deletion Confirmation
+  const handleConfirmDeleteShop = () => {
+    if (!selectedShopForDelete) return;
+    const target = selectedShopForDelete;
+    const res = deleteDemoShop(target.id);
+    if (res.success) {
+      showToast(`Demo shop "${target.name}" (${target.id}) was permanently deleted.`);
+      setSelectedShopForDelete(null);
+      if (selectedShopForDetails?.id === target.id) {
+        setSelectedShopForDetails(null);
+      }
+    } else {
+      showToast(res.error || "Failed to delete demo shop.");
+    }
   };
 
   return (
@@ -473,9 +506,9 @@ export default function SuperAdminPage() {
                       {/* View Details */}
                       <button
                         type="button"
-                        onClick={() => setSelectedShopForDetails(shop)}
+                        onClick={() => openDetailsModal(shop)}
                         className="px-2.5 py-1 rounded-lg bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy font-bold text-[11px] transition-colors cursor-pointer border border-[#EADBCA]"
-                        title="View administrative details"
+                        title="View administrative details & claim code"
                       >
                         Details
                       </button>
@@ -534,6 +567,30 @@ export default function SuperAdminPage() {
                           Verify
                         </button>
                       )}
+
+                      {/* Delete Demo Shop Action (Visible for demo-created testing shops) */}
+                      {shop.isDemoCreated && (() => {
+                        const eligibility = isShopEligibleForDemoDelete(shop.id);
+                        return eligibility.eligible ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedShopForDelete(shop)}
+                            className="px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 font-bold text-[11px] transition-colors cursor-pointer border border-red-300"
+                            title="Delete this demo-created shop"
+                          >
+                            Delete Demo
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-400 font-bold text-[11px] cursor-not-allowed border border-gray-200"
+                            title={eligibility.reason}
+                          >
+                            Delete Demo 🔒
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))
@@ -546,16 +603,19 @@ export default function SuperAdminPage() {
       {/* ============================================================ */}
       {/* MODAL 1: VIEW ADMINISTRATIVE DETAILS                         */}
       {/* ============================================================ */}
-      {selectedShopForDetails && (
+      {/* ============================================================ */}
+      {/* MODAL 1: VIEW ADMINISTRATIVE DETAILS                         */}
+      {/* ============================================================ */}
+      {activeDetailsShop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-[#EADBCA] space-y-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-[#EADBCA] space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-[#F0E4D4]">
               <div>
                 <span className="text-[10px] font-bold text-kf-orange uppercase tracking-wider block">
                   Shop Administrative Record
                 </span>
                 <h3 className="text-base font-extrabold text-kf-navy">
-                  {selectedShopForDetails.name}
+                  {activeDetailsShop.name}
                 </h3>
               </div>
               <button
@@ -573,7 +633,7 @@ export default function SuperAdminPage() {
                   Unique Shop ID
                 </span>
                 <span className="font-mono font-bold text-kf-navy text-sm">
-                  {selectedShopForDetails.id}
+                  {activeDetailsShop.id}
                 </span>
               </div>
 
@@ -582,8 +642,44 @@ export default function SuperAdminPage() {
                   Status
                 </span>
                 <span className="font-bold text-kf-navy capitalize">
-                  {selectedShopForDetails.status}
+                  {activeDetailsShop.status}
                 </span>
+              </div>
+
+              {/* Claim Code Section */}
+              <div className="col-span-2 p-3.5 bg-gradient-to-r from-[#FFFDF9] via-[#FAF3E8] to-[#FFF8F0] rounded-xl border border-[#FF6A00]/40 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-kf-orange uppercase tracking-wider block">
+                    Shop Claim Code (Owner Invitation)
+                  </span>
+                  <span
+                    className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                      activeDetailsShop.isClaimed
+                        ? "bg-green-100 text-green-800 border border-green-200"
+                        : "bg-amber-100 text-amber-800 border border-amber-200"
+                    }`}
+                  >
+                    {activeDetailsShop.isClaimed ? "✓ Claimed by Owner" : "⏳ Ready for Owner Claim"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-[#EADBCA]">
+                  <span className="font-mono font-black text-base sm:text-lg text-kf-navy tracking-wider select-all">
+                    {activeDetailsShop.claimCode || "Generating..."}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCode(activeDetailsShop.claimCode || "")}
+                    className="px-3 py-1.5 bg-[#0F283E] hover:bg-[#163857] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    title="Copy Claim Code to clipboard"
+                  >
+                    <span>📋 Copy</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-[#556B82] leading-tight">
+                  Share this unique claim code with the shop owner to activate their account. The owner password is never shown or stored here.
+                </p>
               </div>
 
               <div className="p-3 bg-[#FCF8F2] rounded-xl border border-[#EADBCA]">
@@ -591,7 +687,7 @@ export default function SuperAdminPage() {
                   Category
                 </span>
                 <span className="font-semibold text-kf-navy">
-                  {selectedShopForDetails.category}
+                  {activeDetailsShop.category}
                 </span>
               </div>
 
@@ -600,7 +696,7 @@ export default function SuperAdminPage() {
                   Registered On
                 </span>
                 <span className="font-semibold text-kf-navy">
-                  {new Date(selectedShopForDetails.createdAt).toLocaleString()}
+                  {new Date(activeDetailsShop.createdAt).toLocaleString()}
                 </span>
               </div>
 
@@ -609,7 +705,7 @@ export default function SuperAdminPage() {
                   Location &amp; Address
                 </span>
                 <span className="font-semibold text-kf-navy">
-                  {selectedShopForDetails.address || selectedShopForDetails.city}
+                  {activeDetailsShop.address || activeDetailsShop.city}
                 </span>
               </div>
 
@@ -618,29 +714,70 @@ export default function SuperAdminPage() {
                   Primary Contact
                 </span>
                 <span className="font-semibold text-kf-navy">
-                  {selectedShopForDetails.ownerName} ({selectedShopForDetails.ownerPhone})
+                  {activeDetailsShop.ownerName} ({activeDetailsShop.ownerPhone})
                 </span>
               </div>
 
+              {/* Demo Shop Management in Details */}
+              {activeDetailsShop.isDemoCreated && (() => {
+                const eligibility = isShopEligibleForDemoDelete(activeDetailsShop.id);
+                return (
+                  <div className="col-span-2 p-3 bg-red-50/60 rounded-xl border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                      <span className="text-[10px] font-bold text-red-800 uppercase block tracking-wider">
+                        Admin Demo Testing Shop
+                      </span>
+                      <span className="text-[11px] text-red-950">
+                        {eligibility.eligible
+                          ? "Created via Super Admin demo flow. Can be safely deleted without impacting real shops."
+                          : eligibility.reason}
+                      </span>
+                    </div>
+                    {eligibility.eligible ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = activeDetailsShop;
+                          setSelectedShopForDetails(null);
+                          setSelectedShopForDelete(target);
+                        }}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer self-start sm:self-auto shadow-xs transition-colors whitespace-nowrap"
+                      >
+                        Delete Demo Shop
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 bg-gray-200 text-gray-500 text-xs font-bold rounded-xl cursor-not-allowed self-start sm:self-auto border border-gray-300 whitespace-nowrap"
+                        title={eligibility.reason}
+                      >
+                        Protected from Deletion 🔒
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Suspension Details if Suspended */}
-              {selectedShopForDetails.status === "suspended" && (
+              {activeDetailsShop.status === "suspended" && (
                 <div className="col-span-2 p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
                   <span className="text-[10px] font-bold text-red-800 uppercase block">
                     Suspension Audit Record
                   </span>
                   <div className="text-xs text-red-950">
-                    <strong>Reason:</strong> {selectedShopForDetails.suspensionReason}
+                    <strong>Reason:</strong> {activeDetailsShop.suspensionReason}
                   </div>
-                  {selectedShopForDetails.suspendedAt && (
+                  {activeDetailsShop.suspendedAt && (
                     <div className="text-[11px] text-red-800">
                       <strong>Suspended At:</strong>{" "}
-                      {new Date(selectedShopForDetails.suspendedAt).toLocaleString()}
+                      {new Date(activeDetailsShop.suspendedAt).toLocaleString()}
                     </div>
                   )}
-                  {selectedShopForDetails.suspensionExpiresAt ? (
+                  {activeDetailsShop.suspensionExpiresAt ? (
                     <div className="text-[11px] text-red-800">
                       <strong>Automatic Expiry:</strong>{" "}
-                      {new Date(selectedShopForDetails.suspensionExpiresAt).toLocaleString()}
+                      {new Date(activeDetailsShop.suspensionExpiresAt).toLocaleString()}
                     </div>
                   ) : (
                     <div className="text-[11px] text-red-800">
@@ -1041,6 +1178,69 @@ export default function SuperAdminPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 5: CONFIRM DELETE DEMO SHOP                            */}
+      {/* ============================================================ */}
+      {selectedShopForDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-red-300 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-red-100">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-black">
+                  !
+                </span>
+                <h3 className="text-base font-extrabold text-kf-navy">
+                  Confirm Demo Shop Deletion
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedShopForDelete(null)}
+                className="w-8 h-8 rounded-full bg-[#FAF3E8] hover:bg-[#F0E4D4] text-kf-navy flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl space-y-2 text-xs text-red-950">
+              <div className="text-[10px] text-red-800 font-bold uppercase tracking-wider">
+                Target Demo Shop
+              </div>
+              <div className="text-sm font-extrabold text-kf-navy">
+                {selectedShopForDelete.name}
+              </div>
+              <div className="text-xs font-mono font-bold text-[#556B82]">
+                Shop ID: <span className="text-kf-navy">{selectedShopForDelete.id}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#556B82] leading-relaxed">
+              Are you sure you want to permanently delete this demo shop?
+              Only this specific demo shop and its isolated demo records will be removed.
+              Original shops (<code>SHOP-PK-001</code>, <code>SHOP-PK-002</code>, <code>SHOP-PK-003</code>),
+              genuine registered shop accounts, customer debts, and financial ledgers are completely protected and unaffected.
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSelectedShopForDelete(null)}
+                className="px-4 py-2 bg-[#F5ECE1] hover:bg-[#EADBCA] text-kf-navy text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                Cancel (Keep Shop)
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteShop}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
+              >
+                <span>Confirm &amp; Delete Demo Shop</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

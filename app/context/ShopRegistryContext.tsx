@@ -30,6 +30,8 @@ export interface RegisteredShop {
   // Claim / invitation code for super admin created shops
   claimCode?: string;
   isClaimed?: boolean;
+  // Explicit persistent classification for safe demo shop deletion
+  isDemoCreated?: boolean;
   // Registered credentials (stored securely for local environment)
   ownerUsername?: string;
   ownerPassword?: string;
@@ -104,6 +106,9 @@ interface ShopRegistryContextType {
   restoreShop: (shopId: string) => { success: boolean; error?: string };
   verifyShopByAdmin: (shopId: string) => { success: boolean; error?: string };
   isShopSuspended: (shopId: string) => { isSuspended: boolean; reason?: string; expiresAt?: string };
+  ensureShopClaimCode: (shopId: string) => string;
+  isShopEligibleForDemoDelete: (shopId: string) => { eligible: boolean; reason?: string };
+  deleteDemoShop: (shopId: string) => { success: boolean; error?: string };
 }
 
 const REGISTRY_STORAGE_KEY = "KHATAFLOW_SHOP_REGISTRY_V1";
@@ -122,6 +127,7 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     status: "active",
     createdAt: "2026-09-01T08:00:00.000Z",
     isClaimed: true,
+    isDemoCreated: false,
     ownerUsername: "khyber@khataflow.pk",
     ownerPassword: "password123",
   },
@@ -136,6 +142,7 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     status: "active",
     createdAt: "2026-09-15T10:30:00.000Z",
     isClaimed: true,
+    isDemoCreated: false,
     ownerUsername: "madina@khataflow.pk",
     ownerPassword: "password123",
   },
@@ -153,6 +160,7 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     suspensionReason: "Annual municipal license compliance update pending review",
     suspensionExpiresAt: "2026-11-18T10:00:00.000Z",
     isClaimed: true,
+    isDemoCreated: false,
     ownerUsername: "rehman.pharmacy@khataflow.pk",
     ownerPassword: "password123",
   },
@@ -672,6 +680,7 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
         createdAt: new Date().toISOString(),
         claimCode,
         isClaimed: false,
+        isDemoCreated: true,
       };
 
       setShops((prev) => [newShop, ...prev]);
@@ -798,6 +807,88 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
     [shops]
   );
 
+  // 7. Ensure Claim Code exists for a shop (never regenerates existing code, persists to localStorage)
+  const ensureShopClaimCode = useCallback(
+    (shopId: string) => {
+      const shop = shops.find((s) => s.id === shopId);
+      if (!shop) return "";
+      if (shop.claimCode) {
+        return shop.claimCode;
+      }
+      const newCode = generateClaimCode();
+      const updatedShop: RegisteredShop = { ...shop, claimCode: newCode };
+      setShops((prev) => prev.map((s) => (s.id === shopId ? updatedShop : s)));
+      return newCode;
+    },
+    [shops, generateClaimCode]
+  );
+
+  // 8. Eligibility checker for manual demo shop deletion
+  const isShopEligibleForDemoDelete = useCallback(
+    (shopId: string) => {
+      if (shopId === "SHOP-PK-001" || shopId === "SHOP-PK-002" || shopId === "SHOP-PK-003") {
+        return {
+          eligible: false,
+          reason: "Protected: Baseline system shop cannot be deleted.",
+        };
+      }
+      const shop = shops.find((s) => s.id === shopId);
+      if (!shop) {
+        return { eligible: false, reason: "Shop not found in registry." };
+      }
+      if (shop.isClaimed) {
+        return {
+          eligible: false,
+          reason: "Protected: Claimed shop with active ownership cannot be deleted through demo controls.",
+        };
+      }
+      if (!shop.isDemoCreated) {
+        return {
+          eligible: false,
+          reason: "Protected: Only demo shops created via Super Admin test flow can be deleted.",
+        };
+      }
+      return { eligible: true };
+    },
+    [shops]
+  );
+
+  // 9. Manual Delete Demo Shop (preserves original shops, customer records, and ledger history)
+  const deleteDemoShop = useCallback(
+    (shopId: string) => {
+      const eligibility = isShopEligibleForDemoDelete(shopId);
+      if (!eligibility.eligible) {
+        return {
+          success: false,
+          error: eligibility.reason || "Shop is not eligible for deletion.",
+        };
+      }
+
+      // Remove shop from registry
+      setShops((prev) => prev.filter((s) => s.id !== shopId));
+
+      // Remove associated scoped demo records where safe
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.removeItem(`KHATAFLOW_STORAGE_${shopId}`);
+        } catch (e) {
+          console.warn("Could not clean scoped storage for deleted shop:", e);
+        }
+      }
+
+      // If active shop was the deleted shop, reset to default shop
+      if (activeShopId === shopId) {
+        setActiveShopIdState("SHOP-PK-001");
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, "SHOP-PK-001");
+        }
+      }
+
+      return { success: true };
+    },
+    [isShopEligibleForDemoDelete, activeShopId]
+  );
+
   const value = useMemo(
     () => ({
       shops,
@@ -817,6 +908,9 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
       restoreShop,
       verifyShopByAdmin,
       isShopSuspended,
+      ensureShopClaimCode,
+      isShopEligibleForDemoDelete,
+      deleteDemoShop,
     }),
     [
       shops,
@@ -835,6 +929,9 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
       restoreShop,
       verifyShopByAdmin,
       isShopSuspended,
+      ensureShopClaimCode,
+      isShopEligibleForDemoDelete,
+      deleteDemoShop,
     ]
   );
 
