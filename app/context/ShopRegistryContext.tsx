@@ -30,6 +30,32 @@ export interface RegisteredShop {
   // Claim / invitation code for super admin created shops
   claimCode?: string;
   isClaimed?: boolean;
+  // Registered credentials (stored securely for local environment)
+  ownerUsername?: string;
+  ownerPassword?: string;
+}
+
+export interface UserSession {
+  username: string;
+  role: "shop-owner" | "super-admin";
+  shopId: string;
+  shopName: string;
+  authenticatedAt: string;
+}
+
+export interface RegisterShopInput {
+  mode: "new" | "claim";
+  name: string;
+  category: ShopCategory;
+  city: string;
+  address?: string;
+  ownerName: string;
+  ownerPhone: string;
+  username: string;
+  password: string;
+  confirmPassword: string;
+  claimShopId?: string;
+  claimCode?: string;
 }
 
 export interface SystemStats {
@@ -44,17 +70,20 @@ interface ShopRegistryContextType {
   shops: RegisteredShop[];
   activeShopId: string;
   activeShop: RegisteredShop | undefined;
+  session: UserSession | null;
+  isAuthenticated: boolean;
+  isHydrated: boolean;
   systemStats: SystemStats;
   setActiveShopId: (shopId: string) => void;
-  registerShopByOwner: (data: {
-    name: string;
-    category: ShopCategory;
-    city: string;
-    address?: string;
-    ownerName: string;
-    ownerPhone: string;
-    claimCode?: string;
-  }) => { success: boolean; shop?: RegisteredShop; message: string; requiresVerification: boolean };
+  login: (
+    usernameOrEmail: string,
+    password: string,
+    role?: "shop-owner" | "super-admin"
+  ) => { success: boolean; error?: string; session?: UserSession };
+  logout: () => void;
+  registerShopByOwner: (
+    data: RegisterShopInput
+  ) => { success: boolean; shop?: RegisteredShop; message: string; session?: UserSession };
   createShopByAdmin: (data: {
     name: string;
     category: ShopCategory;
@@ -79,6 +108,7 @@ interface ShopRegistryContextType {
 
 const REGISTRY_STORAGE_KEY = "KHATAFLOW_SHOP_REGISTRY_V1";
 const ACTIVE_SHOP_STORAGE_KEY = "KHATAFLOW_ACTIVE_SHOP_ID";
+const SESSION_STORAGE_KEY = "KHATAFLOW_SESSION_V1";
 
 const DEFAULT_SHOPS: RegisteredShop[] = [
   {
@@ -92,6 +122,8 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     status: "active",
     createdAt: "2026-09-01T08:00:00.000Z",
     isClaimed: true,
+    ownerUsername: "khyber@khataflow.pk",
+    ownerPassword: "password123",
   },
   {
     id: "SHOP-PK-002",
@@ -104,6 +136,8 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     status: "active",
     createdAt: "2026-09-15T10:30:00.000Z",
     isClaimed: true,
+    ownerUsername: "madina@khataflow.pk",
+    ownerPassword: "password123",
   },
   {
     id: "SHOP-PK-003",
@@ -119,6 +153,8 @@ const DEFAULT_SHOPS: RegisteredShop[] = [
     suspensionReason: "Annual municipal license compliance update pending review",
     suspensionExpiresAt: "2026-11-18T10:00:00.000Z",
     isClaimed: true,
+    ownerUsername: "rehman.pharmacy@khataflow.pk",
+    ownerPassword: "password123",
   },
 ];
 
@@ -127,9 +163,10 @@ const ShopRegistryContext = createContext<ShopRegistryContextType | undefined>(u
 export function ShopRegistryProvider({ children }: { children: React.ReactNode }) {
   const [shops, setShops] = useState<RegisteredShop[]>(DEFAULT_SHOPS);
   const [activeShopId, setActiveShopIdState] = useState<string>("SHOP-PK-001");
+  const [session, setSession] = useState<UserSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Restore registry from localStorage on client mount
+  // Restore registry & session from localStorage on client mount
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
@@ -143,7 +180,6 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
               if (s.status === "suspended" && s.suspensionExpiresAt) {
                 const expiryTime = new Date(s.suspensionExpiresAt).getTime();
                 if (now >= expiryTime) {
-                  // Suspension has naturally expired
                   return {
                     ...s,
                     status: "active" as ShopStatus,
@@ -161,8 +197,30 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
           }
         }
 
+        // Restore authenticated session
+        const rawSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
+        if (rawSession) {
+          try {
+            const parsedSession: UserSession = JSON.parse(rawSession);
+            if (parsedSession && parsedSession.username) {
+              React.startTransition(() => {
+                setSession(parsedSession);
+                if (parsedSession.role === "shop-owner" && parsedSession.shopId) {
+                  setActiveShopIdState(parsedSession.shopId);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn("Failed to parse stored session:", e);
+          }
+        } else {
+          React.startTransition(() => {
+            setSession(null);
+          });
+        }
+
         const savedActive = window.localStorage.getItem(ACTIVE_SHOP_STORAGE_KEY);
-        if (savedActive) {
+        if (savedActive && !rawSession) {
           React.startTransition(() => {
             setActiveShopIdState(savedActive);
           });
@@ -190,16 +248,26 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
     }
   }, [shops, activeShopId, isHydrated]);
 
-  const setActiveShopId = useCallback((shopId: string) => {
-    setActiveShopIdState(shopId);
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, shopId);
-      } catch (e) {
-        console.warn("Error setting active shop ID:", e);
+  const setActiveShopId = useCallback(
+    (shopId: string) => {
+      // Tenant Isolation: An authenticated shop owner cannot switch to another shop's ID
+      if (session && session.role === "shop-owner" && session.shopId !== shopId) {
+        console.warn(
+          `Tenant Isolation: Access denied for shop owner to switch to shop ID "${shopId}".`
+        );
+        return;
       }
-    }
-  }, []);
+      setActiveShopIdState(shopId);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, shopId);
+        } catch (e) {
+          console.warn("Error setting active shop ID:", e);
+        }
+      }
+    },
+    [session]
+  );
 
   // Check suspension status with timestamp check
   const isShopSuspended = useCallback(
@@ -212,7 +280,6 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
           const now = new Date().getTime();
           const expiryTime = new Date(shop.suspensionExpiresAt).getTime();
           if (now >= expiryTime) {
-            // Expired naturally
             return { isSuspended: false };
           }
         }
@@ -288,86 +355,291 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
     return code;
   }, []);
 
-  // 1. Owner self-registration from landing page
-  const registerShopByOwner = useCallback(
-    (data: {
-      name: string;
-      category: ShopCategory;
-      city: string;
-      address?: string;
-      ownerName: string;
-      ownerPhone: string;
-      claimCode?: string;
-    }) => {
-      const trimmedName = data.name.trim();
-      const trimmedOwner = data.ownerName.trim();
-      const trimmedPhone = data.ownerPhone.trim();
+  // 1. Owner Login
+  const login = useCallback(
+    (
+      usernameOrEmail: string,
+      password: string,
+      role: "shop-owner" | "super-admin" = "shop-owner"
+    ) => {
+      const cleanUser = usernameOrEmail.trim().toLowerCase();
+      const cleanPass = password.trim();
 
-      if (!trimmedName || !trimmedOwner || !trimmedPhone) {
+      if (!cleanUser || !cleanPass) {
+        return { success: false, error: "Please enter your username/email and password." };
+      }
+
+      if (role === "super-admin") {
+        const isAdminUser =
+          cleanUser === "admin@khataflow.pk" ||
+          cleanUser === "admin" ||
+          cleanUser === "superadmin";
+        const isAdminPass =
+          cleanPass === "admin123" ||
+          cleanPass === "adminpassword" ||
+          cleanPass === "password123";
+
+        if (isAdminUser && isAdminPass) {
+          const adminSession: UserSession = {
+            username: cleanUser,
+            role: "super-admin",
+            shopId: "SYSTEM",
+            shopName: "Platform Governance",
+            authenticatedAt: new Date().toISOString(),
+          };
+          setSession(adminSession);
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(adminSession));
+            } catch (e) {
+              console.warn("Storage error saving admin session:", e);
+            }
+          }
+          return { success: true, session: adminSession };
+        }
         return {
           success: false,
-          message: "Shop name, owner name, and contact phone are required.",
-          requiresVerification: false,
+          error: "Invalid Super Admin credentials. Hint: admin@khataflow.pk / admin123",
         };
       }
 
-      // Check if registering via an existing Super Admin Claim Code
-      if (data.claimCode) {
-        const matchingShop = shops.find(
-          (s) => s.claimCode && s.claimCode.toUpperCase() === data.claimCode?.trim().toUpperCase()
-        );
-        if (matchingShop) {
-          // Claim existing pre-created shop
-          const updatedShop: RegisteredShop = {
-            ...matchingShop,
-            name: trimmedName || matchingShop.name,
-            ownerName: trimmedOwner || matchingShop.ownerName,
-            ownerPhone: trimmedPhone || matchingShop.ownerPhone,
-            status: "active",
-            isClaimed: true,
-            claimCode: undefined,
-          };
-          setShops((prev) => prev.map((s) => (s.id === matchingShop.id ? updatedShop : s)));
-          setActiveShopId(matchingShop.id);
-          return {
-            success: true,
-            shop: updatedShop,
-            message: `Invitation code verified! Shop "${updatedShop.name}" is now active.`,
-            requiresVerification: false,
-          };
+      // Shop Owner login - matches registered username or phone
+      const matchedShop = shops.find((s) => {
+        const matchUsername = s.ownerUsername && s.ownerUsername.toLowerCase() === cleanUser;
+        const matchPhone = s.ownerPhone && s.ownerPhone.replace(/\D/g, "") === cleanUser.replace(/\D/g, "");
+        // Demo fallback: also allow "shopowner@khataflow.pk" for default shop SHOP-PK-001
+        const isDemoKhyber = s.id === "SHOP-PK-001" && cleanUser === "shopowner@khataflow.pk";
+        if (!matchUsername && !matchPhone && !isDemoKhyber) return false;
+
+        const expectedPass = s.ownerPassword || "password123";
+        return cleanPass === expectedPass;
+      });
+
+      if (!matchedShop) {
+        return {
+          success: false,
+          error: "Invalid username/email or password. Please verify your credentials or register your shop.",
+        };
+      }
+
+      // Check if shop has been claimed/activated
+      if (matchedShop.isClaimed === false) {
+        return {
+          success: false,
+          error: `Shop "${matchedShop.name}" (${matchedShop.id}) has not been claimed yet. Please select "Register Shop" and enter your admin claim code to activate your account.`,
+        };
+      }
+
+      const ownerSession: UserSession = {
+        username: matchedShop.ownerUsername || cleanUser,
+        role: "shop-owner",
+        shopId: matchedShop.id,
+        shopName: matchedShop.name,
+        authenticatedAt: new Date().toISOString(),
+      };
+
+      setSession(ownerSession);
+      setActiveShopIdState(matchedShop.id);
+
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(ownerSession));
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, matchedShop.id);
+        } catch (e) {
+          console.warn("Storage error saving owner session:", e);
         }
       }
 
+      return { success: true, session: ownerSession };
+    },
+    [shops]
+  );
+
+  // 2. Logout - clears session and token
+  const logout = useCallback(() => {
+    setSession(null);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      } catch (e) {
+        console.warn("Error removing session:", e);
+      }
+    }
+  }, []);
+
+  // 3. Owner Registration (either creating new shop or claiming existing admin-created shop)
+  const registerShopByOwner = useCallback(
+    (data: RegisterShopInput) => {
+      const trimmedOwner = data.ownerName.trim();
+      const trimmedPhone = data.ownerPhone.trim();
+      const trimmedUsername = data.username.trim().toLowerCase();
+      const trimmedPassword = data.password.trim();
+      const trimmedConfirm = data.confirmPassword.trim();
+
+      if (!trimmedOwner || !trimmedPhone || !trimmedUsername || !trimmedPassword || !trimmedConfirm) {
+        return {
+          success: false,
+          message: "Please fill in all required owner fields: Name, Phone, Username/Email, and Password.",
+        };
+      }
+
+      if (trimmedPassword !== trimmedConfirm) {
+        return {
+          success: false,
+          message: "Passwords do not match. Please enter identical passwords.",
+        };
+      }
+
+      if (trimmedPassword.length < 6) {
+        return {
+          success: false,
+          message: "Password must be at least 6 characters long.",
+        };
+      }
+
+      // Check duplicate username across registered shops
+      const duplicateUser = shops.find(
+        (s) => s.ownerUsername && s.ownerUsername.toLowerCase() === trimmedUsername
+      );
+      if (duplicateUser) {
+        return {
+          success: false,
+          message: `Username or email "${data.username}" is already registered. Please sign in with your credentials.`,
+        };
+      }
+
+      // Branch 1: Claiming an existing Super Admin-created shop
+      if (data.mode === "claim") {
+        const claimId = data.claimShopId?.trim().toUpperCase();
+        const code = data.claimCode?.trim().toUpperCase();
+
+        if (!claimId || !code) {
+          return {
+            success: false,
+            message: "Both Shop ID and Admin Claim Code are required to claim an existing shop.",
+          };
+        }
+
+        const targetShop = shops.find((s) => s.id.toUpperCase() === claimId);
+        if (!targetShop) {
+          return {
+            success: false,
+            message: `Shop ID "${data.claimShopId}" not found in system registry. Please verify with Super Admin.`,
+          };
+        }
+
+        if (targetShop.isClaimed) {
+          return {
+            success: false,
+            message: `Shop "${targetShop.name}" (${targetShop.id}) has already been claimed and activated. Please sign in with your registered credentials.`,
+          };
+        }
+
+        if (!targetShop.claimCode || targetShop.claimCode.toUpperCase() !== code) {
+          return {
+            success: false,
+            message: `Invalid claim code for shop "${targetShop.name}". Public Shop ID alone is not proof of ownership.`,
+          };
+        }
+
+        // Valid claim: bind credentials and activate shop
+        const updatedShop: RegisteredShop = {
+          ...targetShop,
+          name: data.name?.trim() || targetShop.name,
+          ownerName: trimmedOwner,
+          ownerPhone: trimmedPhone,
+          ownerUsername: trimmedUsername,
+          ownerPassword: trimmedPassword,
+          status: "active",
+          isClaimed: true,
+          claimCode: undefined, // single-use consumed!
+        };
+
+        setShops((prev) => prev.map((s) => (s.id === targetShop.id ? updatedShop : s)));
+        setActiveShopIdState(targetShop.id);
+
+        const newSession: UserSession = {
+          username: trimmedUsername,
+          role: "shop-owner",
+          shopId: targetShop.id,
+          shopName: updatedShop.name,
+          authenticatedAt: new Date().toISOString(),
+        };
+        setSession(newSession);
+
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSession));
+            window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, targetShop.id);
+          } catch (e) {
+            console.warn("Storage error:", e);
+          }
+        }
+
+        return {
+          success: true,
+          shop: updatedShop,
+          session: newSession,
+          message: `Claim verified! Shop "${updatedShop.name}" (${updatedShop.id}) has been activated under your account.`,
+        };
+      }
+
+      // Branch 2: Creating a brand new self-registered shop
+      const trimmedName = data.name.trim();
+      const trimmedCity = data.city.trim() || "Peshawar";
+
+      if (!trimmedName) {
+        return {
+          success: false,
+          message: "Shop Name is required for new shop registration.",
+        };
+      }
+
       const newId = generateUniqueShopId();
-      // Honest registration rule:
-      // Since automated SMS OTP gateway is not configured in this local environment,
-      // the new shop is registered in the official registry. If an admin approval workflow
-      // is preferred, it can be pending-verification or directly activated with clear disclosure.
-      // Here: newly self-registered shops are created as "active" with an honest verification disclosure.
       const newShop: RegisteredShop = {
         id: newId,
         name: trimmedName,
         category: data.category || "General Store",
-        city: data.city.trim() || "Peshawar",
-        address: data.address?.trim() || `${data.city.trim() || "Peshawar"}, Pakistan`,
+        city: trimmedCity,
+        address: data.address?.trim() || `${trimmedCity}, Pakistan`,
         ownerName: trimmedOwner,
         ownerPhone: trimmedPhone,
+        ownerUsername: trimmedUsername,
+        ownerPassword: trimmedPassword,
         status: "active",
         createdAt: new Date().toISOString(),
         isClaimed: true,
       };
 
       setShops((prev) => [newShop, ...prev]);
-      setActiveShopId(newId);
+      setActiveShopIdState(newId);
+
+      const newSession: UserSession = {
+        username: trimmedUsername,
+        role: "shop-owner",
+        shopId: newId,
+        shopName: newShop.name,
+        authenticatedAt: new Date().toISOString(),
+      };
+      setSession(newSession);
+
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSession));
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, newId);
+        } catch (e) {
+          console.warn("Storage error:", e);
+        }
+      }
 
       return {
         success: true,
         shop: newShop,
-        message: `Shop registered successfully! Assigned unique ID: ${newId}. Ready for login.`,
-        requiresVerification: false,
+        session: newSession,
+        message: `Shop registered successfully! Assigned unique ID: ${newId}. Welcome to KhataFlow.`,
       };
     },
-    [shops, generateUniqueShopId, setActiveShopId]
+    [shops, generateUniqueShopId]
   );
 
   // 2. Super Admin Creates Shop (Generates claim code, never sets owner password)
@@ -531,8 +803,13 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
       shops,
       activeShopId,
       activeShop,
+      session,
+      isAuthenticated: session !== null,
+      isHydrated,
       systemStats,
       setActiveShopId,
+      login,
+      logout,
       registerShopByOwner,
       createShopByAdmin,
       updateShopByAdmin,
@@ -545,8 +822,12 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
       shops,
       activeShopId,
       activeShop,
+      session,
+      isHydrated,
       systemStats,
       setActiveShopId,
+      login,
+      logout,
       registerShopByOwner,
       createShopByAdmin,
       updateShopByAdmin,

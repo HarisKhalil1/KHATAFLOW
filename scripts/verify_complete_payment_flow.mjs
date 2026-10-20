@@ -24,6 +24,13 @@ async function run() {
     await page.goto('http://localhost:3000/dashboard/customers', { waitUntil: 'networkidle2' });
     await page.evaluate(() => {
       localStorage.removeItem('KHATAFLOW_STORAGE_V3');
+      localStorage.setItem('KHATAFLOW_SESSION_V1', JSON.stringify({
+        username: 'khyber@khataflow.pk',
+        role: 'shop-owner',
+        shopId: 'SHOP-PK-001',
+        shopName: 'Khyber General Store',
+        authenticatedAt: new Date().toISOString()
+      }));
       sessionStorage.clear();
     });
     await page.reload({ waitUntil: 'networkidle2' });

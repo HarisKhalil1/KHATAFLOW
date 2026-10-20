@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDashboard } from "../context/DashboardContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { useShopRegistry } from "../../context/ShopRegistryContext";
 
 interface NavItem {
   name: string;
@@ -22,6 +23,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
   const pathname = usePathname();
   const { openModal } = useDashboard();
   const { lang, t } = useLanguage();
+  const { activeShop, logout } = useShopRegistry();
 
   const navSections: NavSection[] = [
     {
@@ -273,31 +275,37 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
         ))}
       </nav>
 
-      {/* Demo Shop Badge & Landing Return */}
+      {/* Authenticated Shop Badge & Sign Out */}
       <div className="p-3.5 border-t border-[#1A3F61]/70 bg-[#0B1E2E] flex-shrink-0">
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#163B5C] flex items-center justify-center text-[#FF8C33] text-xs font-bold flex-shrink-0">
-            KG
+            {(activeShop?.name || "KG").slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-white truncate">Khyber General Store</div>
+            <div className="text-xs font-bold text-white truncate" title={activeShop?.name}>
+              {activeShop?.name || "Khyber General Store"}
+            </div>
             <div className="text-[10px] text-[#8DA6BC] flex items-center gap-1.5 truncate">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] flex-shrink-0" />
-              <span className="truncate">Saddar, Peshawar</span>
+              <span className="font-mono text-[9px] text-[#FF9D4D] bg-[#142F46] px-1.5 py-0.5 rounded font-bold">
+                {activeShop?.id || "SHOP-PK-001"}
+              </span>
+              <span className="truncate">{activeShop?.city || "Peshawar"}</span>
             </div>
           </div>
         </div>
 
-        <Link
-          href="/"
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-[11px] font-semibold text-[#8DA6BC] hover:text-white bg-[#142F46] hover:bg-[#1A3D5C] rounded-lg transition-colors no-underline"
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-[11px] font-semibold text-[#8DA6BC] hover:text-white bg-[#142F46] hover:bg-red-950/60 hover:text-red-300 rounded-lg transition-colors cursor-pointer"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          <span>Back to Public Website</span>
-        </Link>
+          <span>Sign Out</span>
+        </button>
       </div>
     </aside>
   );

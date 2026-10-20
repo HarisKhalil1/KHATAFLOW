@@ -7,6 +7,7 @@ import { useShopRegistry, ShopCategory } from "../context/ShopRegistryContext";
 
 type UserRole = "shop-owner" | "super-admin";
 type AuthMode = "login" | "register";
+type RegSubMode = "new" | "claim";
 
 const CATEGORIES: ShopCategory[] = [
   "General Store",
@@ -21,7 +22,7 @@ const CATEGORIES: ShopCategory[] = [
 export default function LoginCard() {
   const router = useRouter();
   const { lang, t } = useLanguage();
-  const { registerShopByOwner } = useShopRegistry();
+  const { registerShopByOwner, login } = useShopRegistry();
 
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [selectedRole, setSelectedRole] = useState<UserRole>("shop-owner");
@@ -32,52 +33,67 @@ export default function LoginCard() {
   const [notification, setNotification] = useState<string | null>(null);
 
   // Registration Form State
+  const [regSubMode, setRegSubMode] = useState<RegSubMode>("new");
   const [regForm, setRegForm] = useState({
     name: "",
     category: "General Store" as ShopCategory,
     city: "Peshawar",
+    address: "",
     ownerName: "",
     ownerPhone: "",
+    username: "",
+    password: "",
+    confirmPassword: "",
+    claimShopId: "",
     claimCode: "",
   });
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setNotification(null);
 
-    if (selectedRole === "super-admin") {
-      setNotification("Authenticating Super Admin console access...");
-      setTimeout(() => {
-        router.push("/superadmin");
-      }, 500);
+    const res = login(email, password, selectedRole);
+    if (!res.success) {
+      setNotification(res.error || "Invalid username/email or password.");
       return;
     }
 
-    // Shop Owner login
-    setNotification(t.login.demoNotification(selectedRole, email || "shopowner@khataflow.pk"));
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 600);
+    if (selectedRole === "super-admin") {
+      setNotification("Super Admin authentication verified! Opening console...");
+      setTimeout(() => {
+        router.push("/superadmin");
+      }, 400);
+    } else {
+      setNotification("Authentication verified! Loading your shop dashboard...");
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 400);
+    }
   };
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regForm.name.trim() || !regForm.ownerName.trim() || !regForm.ownerPhone.trim()) {
-      setNotification("Please fill in Shop Name, Owner Name, and Contact Phone.");
-      return;
-    }
+    setNotification(null);
+    setRegSuccess(null);
 
     const res = registerShopByOwner({
+      mode: regSubMode,
       name: regForm.name,
       category: regForm.category,
       city: regForm.city,
+      address: regForm.address,
       ownerName: regForm.ownerName,
       ownerPhone: regForm.ownerPhone,
-      claimCode: regForm.claimCode.trim() || undefined,
+      username: regForm.username,
+      password: regForm.password,
+      confirmPassword: regForm.confirmPassword,
+      claimShopId: regForm.claimShopId,
+      claimCode: regForm.claimCode,
     });
 
     if (res.success && res.shop) {
-      setRegSuccess(`✓ Registered! Assigned ID: ${res.shop.id}. Opening your dashboard...`);
+      setRegSuccess(`✓ ${res.message} Opening your dashboard...`);
       setNotification(null);
       setTimeout(() => {
         router.push("/dashboard");
@@ -103,14 +119,14 @@ export default function LoginCard() {
             ? selectedRole === "super-admin"
               ? "Super Admin Console"
               : t.login.title
-            : "Register New Shop"}
+            : "Register Shop Account"}
         </h2>
         <p className="text-xs font-medium text-[#7B90A2]">
           {authMode === "login"
             ? selectedRole === "super-admin"
               ? "Sign in to platform governance & shop directory"
               : t.login.subtitle
-            : "Set up your shop ledger account in seconds"}
+            : "Register a new shop or claim an admin-created shop"}
         </p>
       </div>
 
@@ -190,16 +206,18 @@ export default function LoginCard() {
         </div>
       )}
 
-      {/* VIEW 1: LOGIN FORM */}
+      {/* VIEW 1: NORMAL LOGIN FORM (Strictly Username/Email + Password only) */}
       {authMode === "login" ? (
         <form onSubmit={handleLoginSubmit} className="space-y-3.5" noValidate>
-          {/* Email */}
+          {/* Username or Email */}
           <div>
             <label
               htmlFor="login-email"
               className="block text-xs font-bold text-kf-navy mb-1.5"
             >
-              {selectedRole === "super-admin" ? "Admin Username / Email" : t.login.emailLabel}
+              {selectedRole === "super-admin"
+                ? "Admin Username / Email"
+                : "Username or Email"}
             </label>
             <div className="relative flex items-center">
               <div
@@ -221,15 +239,16 @@ export default function LoginCard() {
               </div>
               <input
                 id="login-email"
-                type="email"
+                type="text"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={
                   selectedRole === "super-admin"
                     ? "admin@khataflow.pk"
-                    : t.login.emailPlaceholder
+                    : "e.g. khyber@khataflow.pk or phone"
                 }
-                autoComplete="email"
+                autoComplete="username"
                 dir="ltr"
                 style={{
                   paddingLeft: lang === "ur" ? "14px" : "42px",
@@ -270,6 +289,7 @@ export default function LoginCard() {
               <input
                 id="login-password"
                 type={showPassword ? "text" : "password"}
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t.login.passwordPlaceholder}
@@ -359,104 +379,236 @@ export default function LoginCard() {
           </button>
         </form>
       ) : (
-        /* VIEW 2: SHOP OWNER SELF-REGISTRATION FORM */
-        <form onSubmit={handleRegisterSubmit} className="space-y-3" noValidate>
-          <div>
-            <label className="block text-xs font-bold text-kf-navy mb-1">
-              Shop Name *
-            </label>
-            <input
-              type="text"
-              required
-              value={regForm.name}
-              onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
-              placeholder="e.g. Madina Super Store"
-              className="w-full h-10 px-3 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-bold text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
-            />
+        /* VIEW 2: SHOP OWNER REGISTRATION (Separated: New Shop vs Claim Existing) */
+        <form onSubmit={handleRegisterSubmit} className="space-y-2.5" noValidate>
+          {/* Submode Switcher: New Shop vs Claim Existing Shop */}
+          <div className="flex bg-[#F5ECE1] rounded-xl p-1 mb-2 border border-[#EADBCA] h-9 items-center">
+            <button
+              type="button"
+              onClick={() => {
+                setRegSubMode("new");
+                setNotification(null);
+              }}
+              className={`flex-1 h-full flex items-center justify-center text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                regSubMode === "new"
+                  ? "bg-kf-orange text-white shadow-xs"
+                  : "text-[#556B82] hover:text-kf-navy"
+              }`}
+            >
+              New Shop
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRegSubMode("claim");
+                setNotification(null);
+              }}
+              className={`flex-1 h-full flex items-center justify-center text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                regSubMode === "claim"
+                  ? "bg-kf-orange text-white shadow-xs"
+                  : "text-[#556B82] hover:text-kf-navy"
+              }`}
+            >
+              Claim Existing Shop
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs font-bold text-kf-navy mb-1">
-                Category
-              </label>
-              <select
-                value={regForm.category}
-                onChange={(e) =>
-                  setRegForm({ ...regForm, category: e.target.value as ShopCategory })
-                }
-                className="w-full h-10 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-bold text-kf-navy outline-none focus:border-kf-orange focus:bg-white cursor-pointer"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+          <div className="max-h-[340px] sm:max-h-[360px] overflow-y-auto pr-1 space-y-2 scrollbar-thin">
+            {regSubMode === "claim" ? (
+              /* CLAIM FIELDS */
+              <>
+                <div className="p-2.5 bg-[#FFF7EE] border border-[#FFD9B3] rounded-xl text-[11px] text-kf-navy space-y-0.5">
+                  <div className="font-bold text-kf-orange">Claim Verification Notice:</div>
+                  <div className="text-[#556B82] text-[10.5px]">
+                    Enter the exact Shop ID and secret Claim Code provided by your Super Admin. Public Shop ID alone cannot claim a shop.
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                      Shop ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={regForm.claimShopId}
+                      onChange={(e) => setRegForm({ ...regForm, claimShopId: e.target.value })}
+                      placeholder="SHOP-PK-004"
+                      className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-mono font-bold text-kf-navy uppercase placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                      Claim Code *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={regForm.claimCode}
+                      onChange={(e) => setRegForm({ ...regForm, claimCode: e.target.value })}
+                      placeholder="CLAIM-XXXXXX"
+                      className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-mono font-bold text-kf-navy uppercase placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* NEW SHOP FIELDS */
+              <>
+                <div>
+                  <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                    Shop Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regForm.name}
+                    onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
+                    placeholder="e.g. Madina Super Store"
+                    className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-bold text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                      Category
+                    </label>
+                    <select
+                      value={regForm.category}
+                      onChange={(e) =>
+                        setRegForm({ ...regForm, category: e.target.value as ShopCategory })
+                      }
+                      className="w-full h-9 px-2 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-bold text-kf-navy outline-none focus:border-kf-orange focus:bg-white cursor-pointer"
+                    >
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                      City *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={regForm.city}
+                      onChange={(e) => setRegForm({ ...regForm, city: e.target.value })}
+                      placeholder="Peshawar"
+                      className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                    Shop Address (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={regForm.address}
+                    onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
+                    placeholder="Shop #4, Main Bazar"
+                    className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* COMMON OWNER & CREDENTIAL FIELDS */}
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#F0E4D4]">
+              <div>
+                <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                  Owner Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={regForm.ownerName}
+                  onChange={(e) => setRegForm({ ...regForm, ownerName: e.target.value })}
+                  placeholder="Farhan Ali"
+                  className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                  Owner Phone *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={regForm.ownerPhone}
+                  onChange={(e) => setRegForm({ ...regForm, ownerPhone: e.target.value })}
+                  placeholder="0300-1234567"
+                  className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-kf-navy mb-1">
-                City / Location
-              </label>
-              <input
-                type="text"
-                value={regForm.city}
-                onChange={(e) => setRegForm({ ...regForm, city: e.target.value })}
-                placeholder="Peshawar"
-                className="w-full h-10 px-3 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs font-bold text-kf-navy mb-1">
-                Owner Name *
+              <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                Username or Login Email *
               </label>
               <input
                 type="text"
                 required
-                value={regForm.ownerName}
-                onChange={(e) => setRegForm({ ...regForm, ownerName: e.target.value })}
-                placeholder="Farhan Ali"
-                className="w-full h-10 px-3 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                value={regForm.username}
+                onChange={(e) => setRegForm({ ...regForm, username: e.target.value })}
+                placeholder="farhan@khataflow.pk or farhan_khan"
+                autoComplete="username"
+                className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-kf-navy mb-1">
-                Phone *
-              </label>
-              <input
-                type="text"
-                required
-                value={regForm.ownerPhone}
-                onChange={(e) => setRegForm({ ...regForm, ownerPhone: e.target.value })}
-                placeholder="0300-1234567"
-                className="w-full h-10 px-3 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
-              />
-            </div>
-          </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                  Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regForm.password}
+                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                  placeholder="Min. 6 chars"
+                  autoComplete="new-password"
+                  className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                />
+              </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-[#556B82] mb-1">
-              Admin Claim Code (Optional)
-            </label>
-            <input
-              type="text"
-              value={regForm.claimCode}
-              onChange={(e) => setRegForm({ ...regForm, claimCode: e.target.value })}
-              placeholder="e.g. CLAIM-AB12CD"
-              className="w-full h-9 px-3 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-mono font-bold text-kf-navy uppercase placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
-            />
+              <div>
+                <label className="block text-[11px] font-bold text-kf-navy mb-0.5">
+                  Confirm Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={regForm.confirmPassword}
+                  onChange={(e) => setRegForm({ ...regForm, confirmPassword: e.target.value })}
+                  placeholder="Repeat password"
+                  autoComplete="new-password"
+                  className="w-full h-9 px-2.5 bg-[#FAF6F0]/70 border border-[#E5DACD] rounded-xl text-xs font-medium text-kf-navy placeholder:text-[#9FB1C1] focus:bg-white focus:border-kf-orange outline-none transition-all"
+                />
+              </div>
+            </div>
           </div>
 
           <button
             type="submit"
-            className="w-full h-10 sm:h-11 bg-gradient-to-r from-[#FF6A00] to-[#FF7708] hover:from-[#E85E00] hover:to-[#FF6A00] text-white font-bold text-xs sm:text-sm rounded-xl shadow-[0_4px_16px_rgba(255,106,0,0.32)] flex items-center justify-center gap-2 cursor-pointer transition-all mt-2"
+            className="w-full h-10 sm:h-11 bg-gradient-to-r from-[#FF6A00] to-[#FF7708] hover:from-[#E85E00] hover:to-[#FF6A00] text-white font-bold text-xs sm:text-sm rounded-xl shadow-[0_4px_16px_rgba(255,106,0,0.32)] flex items-center justify-center gap-2 cursor-pointer transition-all mt-1"
           >
-            <span>Register &amp; Setup Khata</span>
+            <span>
+              {regSubMode === "claim"
+                ? "Verify Claim & Activate Account"
+                : "Create Shop & Account"}
+            </span>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14" />
               <path d="m12 5 7 7-7 7" />
@@ -475,6 +627,7 @@ export default function LoginCard() {
               onClick={() => {
                 setAuthMode("register");
                 setNotification(null);
+                setRegSuccess(null);
               }}
               className="text-[#FF6A00] hover:underline font-bold cursor-pointer transition-colors"
             >
@@ -489,6 +642,7 @@ export default function LoginCard() {
               onClick={() => {
                 setAuthMode("login");
                 setNotification(null);
+                setRegSuccess(null);
               }}
               className="text-[#0284C7] hover:underline font-bold cursor-pointer transition-colors"
             >

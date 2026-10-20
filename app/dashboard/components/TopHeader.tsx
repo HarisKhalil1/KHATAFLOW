@@ -84,7 +84,7 @@ const PAGE_TITLES_UR: Record<string, { title: string; subtitle: string }> = {
 export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
   const pathname = usePathname();
   const { lang, setLang } = useLanguage();
-  const { activeShop } = useShopRegistry();
+  const { activeShop, logout } = useShopRegistry();
   const {
     notifications,
     unreadNotificationCount,
@@ -146,9 +146,14 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
             <h1 className="text-sm sm:text-lg lg:text-xl font-extrabold text-kf-navy tracking-tight truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
               {currentMeta.title}
             </h1>
-            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF2E5] text-kf-orange border border-[#FFD9B3]">
-              <span className="w-1.5 h-1.5 rounded-full bg-kf-orange" />
-              Peshawar
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FFF2E5] text-kf-navy border border-[#FFD9B3]">
+              <span className="w-1.5 h-1.5 rounded-full bg-kf-orange flex-shrink-0" />
+              <span className="font-extrabold text-kf-navy truncate max-w-[140px]">
+                {activeShop?.name || "Khyber General Store"}
+              </span>
+              <span className="font-mono text-[9px] text-kf-orange font-bold bg-white px-1 py-0.5 rounded border border-[#FFE0CC]">
+                {activeShop?.id || "SHOP-PK-001"}
+              </span>
             </span>
           </div>
           <p className="text-xs text-[#556B82] hidden md:block truncate mt-0.5">
@@ -380,17 +385,21 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
 
               <div className="border-t border-[#F0E4D4] my-1" />
 
-              <Link
-                href="/"
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors no-underline"
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileOpen(false);
+                  logout();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer border-none bg-transparent text-left"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                   <polyline points="16 17 21 12 16 7" />
                   <line x1="21" y1="12" x2="9" y2="12" />
                 </svg>
-                <span>Exit to Landing Page</span>
-              </Link>
+                <span>Sign Out (Shop Owner)</span>
+              </button>
             </div>
           )}
         </div>

@@ -67,13 +67,15 @@ export default function SuperAdminPage() {
   const [estimatedExpiryText, setEstimatedExpiryText] = useState("Calculating...");
 
   useEffect(() => {
-    if (suspendDuration === null) {
-      setEstimatedExpiryText("Indefinite");
-    } else {
-      const d = new Date();
-      d.setTime(d.getTime() + suspendDuration * 3600 * 1000);
-      setEstimatedExpiryText(d.toLocaleString());
-    }
+    queueMicrotask(() => {
+      if (suspendDuration === null) {
+        setEstimatedExpiryText("Indefinite");
+      } else {
+        const d = new Date();
+        d.setTime(d.getTime() + suspendDuration * 3600 * 1000);
+        setEstimatedExpiryText(d.toLocaleString());
+      }
+    });
   }, [suspendDuration]);
 
   // Toast / Feedback message

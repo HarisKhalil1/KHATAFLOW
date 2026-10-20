@@ -3,8 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import { LanguageProvider } from "../context/LanguageContext";
+import { useShopRegistry } from "../context/ShopRegistryContext";
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
+  const { logout } = useShopRegistry();
+
   return (
     <LanguageProvider>
       <div className="min-h-screen bg-[#FAF3E8] flex flex-col text-kf-navy antialiased selection:bg-[#FFE0CC]">
@@ -44,12 +47,13 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
               <span>🏬 Shop Portal</span>
             </Link>
 
-            <Link
-              href="/"
-              className="text-xs font-bold text-white bg-gradient-to-r from-[#FF6A00] to-[#FF8C33] hover:from-[#E85E00] hover:to-[#FF6A00] px-3.5 py-1.5 rounded-xl shadow-xs transition-all no-underline flex items-center gap-1.5"
+            <button
+              type="button"
+              onClick={logout}
+              className="text-xs font-bold text-white bg-gradient-to-r from-[#FF6A00] to-[#FF8C33] hover:from-[#E85E00] hover:to-[#FF6A00] px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 border-none"
             >
               <span>Exit Console</span>
-            </Link>
+            </button>
           </div>
         </header>
 

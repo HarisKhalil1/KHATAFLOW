@@ -20,7 +20,9 @@ export default function SuspensionLockScreen({
   const [isExpired, setIsExpired] = React.useState(false);
   React.useEffect(() => {
     if (expiresAt) {
-      setIsExpired(Date.now() >= new Date(expiresAt).getTime());
+      queueMicrotask(() => {
+        setIsExpired(Date.now() >= new Date(expiresAt).getTime());
+      });
     }
   }, [expiresAt]);
 
