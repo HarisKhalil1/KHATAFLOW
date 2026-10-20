@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
+import { useShopRegistry } from "../../context/ShopRegistryContext";
 
 export type TransactionType = "credit" | "payment" | "adjustment";
 export type ExpenseCategory = "Inventory" | "Rent" | "Utilities" | "Transport" | "Staff" | "Other";
@@ -849,30 +850,45 @@ const DashboardContext = createContext<DashboardContextType | undefined>(undefin
 const STORAGE_KEY = "KHATAFLOW_STORAGE_V3";
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
+  const { activeShopId } = useShopRegistry();
+  const currentStorageKey = activeShopId === "SHOP-PK-001" ? STORAGE_KEY : `KHATAFLOW_STORAGE_${activeShopId}`;
+
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => STANDARD_PRODUCTS);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [bills, setBills] = useState<CustomerBill[]>(INITIAL_BILLS);
+  const [customers, setCustomers] = useState<Customer[]>(() =>
+    activeShopId === "SHOP-PK-001" ? INITIAL_CUSTOMERS : []
+  );
+  const [bills, setBills] = useState<CustomerBill[]>(() =>
+    activeShopId === "SHOP-PK-001" ? INITIAL_BILLS : []
+  );
   const [adjustments, setAdjustments] = useState<ItemAdjustment[]>([]);
-  const [transactions, setTransactions] = useState<LedgerTransaction[]>(INITIAL_TRANSACTIONS);
-  const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>(() =>
+    activeShopId === "SHOP-PK-001" ? INITIAL_TRANSACTIONS : []
+  );
+  const [expenses, setExpenses] = useState<Expense[]>(() =>
+    activeShopId === "SHOP-PK-001" ? INITIAL_EXPENSES : []
+  );
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
+    activeShopId === "SHOP-PK-001" ? INITIAL_NOTIFICATIONS : []
+  );
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Restore persistent state from localStorage on client mount
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
+        const raw = window.localStorage.getItem(currentStorageKey);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && parsed.version === 1) {
-            if (Array.isArray(parsed.customers) && parsed.customers.length > 0) setCustomers(parsed.customers);
-            if (Array.isArray(parsed.bills)) setBills(parsed.bills);
-            if (Array.isArray(parsed.adjustments)) setAdjustments(parsed.adjustments);
-            if (Array.isArray(parsed.transactions) && parsed.transactions.length > 0) setTransactions(parsed.transactions);
-            if (Array.isArray(parsed.expenses) && parsed.expenses.length > 0) setExpenses(parsed.expenses);
-            if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
-            if (Array.isArray(parsed.products) && parsed.products.length > 0) setProducts(parsed.products);
+            queueMicrotask(() => {
+              if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
+              if (Array.isArray(parsed.bills)) setBills(parsed.bills);
+              if (Array.isArray(parsed.adjustments)) setAdjustments(parsed.adjustments);
+              if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+              if (Array.isArray(parsed.expenses)) setExpenses(parsed.expenses);
+              if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
+              if (Array.isArray(parsed.products) && parsed.products.length > 0) setProducts(parsed.products);
+            });
           }
         }
       }
@@ -881,7 +897,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsHydrated(true);
     }
-  }, []);
+  }, [currentStorageKey, activeShopId]);
 
   // Save persistent state whenever data changes
   useEffect(() => {
@@ -899,12 +915,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           notifications,
           products,
         };
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        window.localStorage.setItem(currentStorageKey, JSON.stringify(payload));
       }
     } catch (err) {
       console.warn("Could not save KhataFlow to storage:", err);
     }
-  }, [isHydrated, customers, bills, adjustments, transactions, expenses, notifications, products]);
+  }, [isHydrated, currentStorageKey, activeShopId, customers, bills, adjustments, transactions, expenses, notifications, products]);
 
   // Modal control
   // Modal control
@@ -1930,7 +1946,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, transaction: newTx };
     },
-    [customersWithBalances, bills]
+    [allCustomersWithBalances, bills]
   );
 
   // Add Credit (Udhaar) action with structured items support
@@ -2172,8 +2188,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Estimated cash counter sales for Peshawar retail store in this month
-      // (Provides realistic complete sales ledger for the store)
-      const cashCounterSales = monthStr === "2026-10" ? 95000 : monthStr === "2026-09" ? 88000 : 82000;
+      const isDemoStore = activeShopId === "SHOP-PK-001" && bills.length > 0;
+      const cashCounterSales = isDemoStore
+        ? (monthStr === "2026-10" ? 95000 : monthStr === "2026-09" ? 88000 : 82000)
+        : 0;
       const totalSales = creditSales + cashCounterSales;
 
       // COGS Calculation:
@@ -2225,7 +2243,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           "Accrual accounting applied: Sales include both counter cash sales and new credit bills. COGS represents wholesale stock cost. Cash receipts and outstanding udhaar are tracked separately from net profit.",
       };
     },
-    [transactions, expenses, bills, totalOutstandingCredit]
+    [transactions, expenses, bills, totalOutstandingCredit, activeShopId]
   );
 
   const getYearlyProfit = useCallback(
@@ -2327,20 +2345,30 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const resetDemoData = useCallback(() => {
     try {
       if (typeof window !== "undefined") {
-        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(currentStorageKey);
       }
     } catch (e) {
       console.warn("Could not clear localStorage:", e);
     }
-    setProducts(STANDARD_PRODUCTS);
-    setCustomers(INITIAL_CUSTOMERS);
-    setBills(INITIAL_BILLS);
-    setAdjustments([]);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setExpenses(INITIAL_EXPENSES);
-    setNotifications(INITIAL_NOTIFICATIONS);
+    if (activeShopId === "SHOP-PK-001") {
+      setProducts(STANDARD_PRODUCTS);
+      setCustomers(INITIAL_CUSTOMERS);
+      setBills(INITIAL_BILLS);
+      setAdjustments([]);
+      setTransactions(INITIAL_TRANSACTIONS);
+      setExpenses(INITIAL_EXPENSES);
+      setNotifications(INITIAL_NOTIFICATIONS);
+    } else {
+      setProducts(STANDARD_PRODUCTS);
+      setCustomers([]);
+      setBills([]);
+      setAdjustments([]);
+      setTransactions([]);
+      setExpenses([]);
+      setNotifications([]);
+    }
     closeModal();
-  }, [closeModal]);
+  }, [activeShopId, currentStorageKey, closeModal]);
 
   return (
     <DashboardContext.Provider

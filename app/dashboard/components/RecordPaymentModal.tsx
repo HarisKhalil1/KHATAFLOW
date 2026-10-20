@@ -35,6 +35,7 @@ export default function RecordPaymentModal() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
   const [recordedAmount, setRecordedAmount] = useState(0);
+  const [recordedReceiptNo, setRecordedReceiptNo] = useState("REC-1001");
   const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   // Item allocations state map: itemId -> allocatedAmount string
@@ -49,7 +50,7 @@ export default function RecordPaymentModal() {
   const bill = getCustomerBill(customerId);
 
   // Pending items that have remaining balance > 0
-  const pendingItems = (bill?.items || []).filter((item) => item.remainingBalance > 0);
+  const pendingItems = useMemo(() => (bill?.items || []).filter((item) => item.remainingBalance > 0), [bill]);
   const hasBillItemsOnRecord = (bill?.items || []).length > 0;
 
   // Helper to handle customer change and clear allocations
@@ -185,6 +186,8 @@ export default function RecordPaymentModal() {
     if (!result.success) {
       setError(result.error || "Failed to record payment.");
     } else {
+      const rec = result.transaction?.receiptNo || "REC-PAID";
+      setRecordedReceiptNo(rec);
       setRecordedAmount(numAmount);
       setSuccessMsg(`Payment of Rs. ${numAmount.toLocaleString()} successfully recorded!`);
       setPaymentRecorded(true);
@@ -268,7 +271,7 @@ export default function RecordPaymentModal() {
               title="Send Payment Receipt on WhatsApp"
               initialMessageEn={generatePaymentReceiptText({
                 customerName: selectedCustomer?.name || "",
-                receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                receiptNo: recordedReceiptNo,
                 date,
                 amountPaid: recordedAmount,
                 newBalance: Math.max(0, currentBalance - recordedAmount),
@@ -277,7 +280,7 @@ export default function RecordPaymentModal() {
               })}
               initialMessageUr={generatePaymentReceiptText({
                 customerName: selectedCustomer?.name || "",
-                receiptNo: `REC-${Date.now().toString().slice(-4)}`,
+                receiptNo: recordedReceiptNo,
                 date,
                 amountPaid: recordedAmount,
                 newBalance: Math.max(0, currentBalance - recordedAmount),

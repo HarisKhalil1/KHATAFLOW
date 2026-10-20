@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { normalizePakistaniPhone, isValidPakistaniPhone, getWhatsAppUrl } from "../utils/whatsapp";
 
 interface WhatsAppShareModalProps {
@@ -23,18 +23,12 @@ export default function WhatsAppShareModal({
   initialMessageUr,
 }: WhatsAppShareModalProps) {
   const [lang, setLang] = useState<"en" | "ur">("ur");
-  const [phone, setPhone] = useState(customerPhone);
-  const [message, setMessage] = useState(initialMessageUr);
+  const [editedPhone, setEditedPhone] = useState<string | null>(null);
+  const [editedMessage, setEditedMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Sync when props change or lang toggles
-  useEffect(() => {
-    setPhone(customerPhone);
-  }, [customerPhone]);
-
-  useEffect(() => {
-    setMessage(lang === "ur" ? initialMessageUr : initialMessageEn);
-  }, [lang, initialMessageUr, initialMessageEn]);
+  const phone = editedPhone ?? customerPhone;
+  const message = editedMessage ?? (lang === "ur" ? initialMessageUr : initialMessageEn);
 
   if (!isOpen) return null;
 
@@ -115,7 +109,7 @@ export default function WhatsAppShareModal({
               id="wa-phone-input"
               type="text"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setEditedPhone(e.target.value)}
               placeholder="03001234567"
               className="w-full h-10 px-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-semibold text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all"
             />
@@ -127,7 +121,10 @@ export default function WhatsAppShareModal({
             <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-[#EADBCA]">
               <button
                 type="button"
-                onClick={() => setLang("ur")}
+                onClick={() => {
+                  setLang("ur");
+                  setEditedMessage(null);
+                }}
                 className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
                   lang === "ur" ? "bg-emerald-600 text-white shadow-2xs" : "text-[#556B82] hover:text-kf-navy"
                 }`}
@@ -136,7 +133,10 @@ export default function WhatsAppShareModal({
               </button>
               <button
                 type="button"
-                onClick={() => setLang("en")}
+                onClick={() => {
+                  setLang("en");
+                  setEditedMessage(null);
+                }}
                 className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
                   lang === "en" ? "bg-emerald-600 text-white shadow-2xs" : "text-[#556B82] hover:text-kf-navy"
                 }`}
@@ -165,7 +165,7 @@ export default function WhatsAppShareModal({
               rows={8}
               dir={lang === "ur" ? "rtl" : "ltr"}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => setEditedMessage(e.target.value)}
               className={`w-full p-3 bg-[#FCF7F0] border border-[#EADBCA] rounded-xl text-xs font-medium text-kf-navy focus:bg-white focus:border-kf-orange focus:ring-1 focus:ring-kf-orange outline-none transition-all resize-none leading-relaxed ${
                 lang === "ur" ? "font-urdu" : "font-sans"
               }`}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useDashboard } from "../context/DashboardContext";
 
 export default function EditCustomerModal() {
@@ -8,22 +8,13 @@ export default function EditCustomerModal() {
 
   const customer = selectedCustomerIdForModal ? getCustomerWithBalance(selectedCustomerIdForModal) : undefined;
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [notes, setNotes] = useState("");
+  const [name, setName] = useState(() => customer?.name || "");
+  const [phone, setPhone] = useState(() => customer?.phone || "");
+  const [address, setAddress] = useState(() => customer?.address || "");
+  const [notes, setNotes] = useState(() => customer?.notes || "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (customer) {
-      setName(customer.name);
-      setPhone(customer.phone);
-      setAddress(customer.address || "");
-      setNotes(customer.notes || "");
-    }
-  }, [customer]);
 
   if (!customer) return null;
 

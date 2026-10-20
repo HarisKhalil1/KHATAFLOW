@@ -512,7 +512,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("KHATAFLOW_LANG") as Language | null;
       if (saved === "en" || saved === "ur") {
-        setLangState(saved);
+        queueMicrotask(() => {
+          setLangState(saved);
+        });
         document.documentElement.lang = saved;
         document.documentElement.dir = saved === "ur" ? "rtl" : "ltr";
       }

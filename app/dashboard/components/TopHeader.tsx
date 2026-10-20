@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDashboard } from "../context/DashboardContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { useShopRegistry } from "../../context/ShopRegistryContext";
 
 interface TopHeaderProps {
   onOpenMobile: () => void;
@@ -82,7 +83,8 @@ const PAGE_TITLES_UR: Record<string, { title: string; subtitle: string }> = {
 
 export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
   const pathname = usePathname();
-  const { lang, setLang, t } = useLanguage();
+  const { lang, setLang } = useLanguage();
+  const { activeShop } = useShopRegistry();
   const {
     notifications,
     unreadNotificationCount,
@@ -314,10 +316,12 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
             className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[#F5ECE1] transition-colors cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              AR
+              {(activeShop?.ownerName || "Haji Abdul Rehman").slice(0, 2).toUpperCase()}
             </div>
             <div className="hidden sm:block text-left text-xs">
-              <div className="font-extrabold text-kf-navy leading-none">Haji Abdul Rehman</div>
+              <div className="font-extrabold text-kf-navy leading-none">
+                {activeShop?.ownerName || "Haji Abdul Rehman"}
+              </div>
               <div className="text-[10px] text-[#556B82] leading-none mt-1">Shop Owner</div>
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#556B82]">
@@ -328,12 +332,24 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
           {profileOpen && (
             <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#EADBCA] p-2 z-50">
               <div className="p-3 border-b border-[#F0E4D4] bg-[#FCF7F0] rounded-xl mb-1">
-                <div className="font-extrabold text-xs text-kf-navy">Haji Abdul Rehman</div>
-                <div className="text-[11px] text-[#556B82]">Khyber General Store</div>
+                <div className="font-extrabold text-xs text-kf-navy">
+                  {activeShop?.ownerName || "Haji Abdul Rehman"}
+                </div>
+                <div className="text-[11px] text-[#556B82]">
+                  {activeShop?.name || "Khyber General Store"}
+                </div>
                 <div className="text-[10px] text-kf-orange font-semibold mt-1">
-                  Peshawar Saddar Road • PKR (Rs.)
+                  {activeShop?.city || "Peshawar"} • {activeShop?.id || "SHOP-PK-001"}
                 </div>
               </div>
+
+              <Link
+                href="/superadmin"
+                onClick={() => setProfileOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#0F283E] hover:bg-[#FAF3E8] transition-colors no-underline"
+              >
+                <span>🛡️ Super Admin Console</span>
+              </Link>
 
               <Link
                 href="/dashboard/settings"

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useDashboard, LedgerTransaction, Expense } from "../context/DashboardContext";
+import { useDashboard } from "../context/DashboardContext";
 import CustomerDetailsModal from "../components/CustomerDetailsModal";
 
 type RecordFilterType = "all" | "payment" | "credit" | "adjustment" | "expense";
@@ -20,7 +20,7 @@ interface UnifiedRecord {
 }
 
 export default function AllRecordsPage() {
-  const { transactions, expenses, openModal } = useDashboard();
+  const { transactions, expenses } = useDashboard();
 
   const [filterType, setFilterType] = useState<RecordFilterType>("all");
   const [searchQuery, setSearchQuery] = useState("");

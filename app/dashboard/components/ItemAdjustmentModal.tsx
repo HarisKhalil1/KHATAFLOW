@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { useDashboard } from "../context/DashboardContext";
 
 export default function ItemAdjustmentModal() {
@@ -40,15 +40,6 @@ export default function ItemAdjustmentModal() {
 
   const matchedItem = validation.matchedItem;
 
-  // Prefill quantity and unit price when an item is selected
-  useEffect(() => {
-    if (matchedItem) {
-      if (correctedUnitPrice === "") {
-        setCorrectedUnitPrice(matchedItem.unitPrice.toString());
-      }
-    }
-  }, [matchedItem, correctedUnitPrice]);
-
   const numCorrectedPrice =
     correctedUnitPrice !== "" && !isNaN(parseFloat(correctedUnitPrice)) && parseFloat(correctedUnitPrice) > 0
       ? parseFloat(correctedUnitPrice)
@@ -72,8 +63,6 @@ export default function ItemAdjustmentModal() {
   const currentCustomerBalance = selectedCustomer?.currentBalance || 0;
   const projectedCustomerBalance = Math.max(0, currentCustomerBalance + differenceAmount);
 
-  const currentBillTotal = bill?.totalAmount || 0;
-  const projectedBillTotal = Math.max(0, currentBillTotal + differenceAmount);
   const currentBillRemaining = bill?.remainingBalance || 0;
   const projectedBillRemaining = Math.max(0, currentBillRemaining + differenceAmount);
 

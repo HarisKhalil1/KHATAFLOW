@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useDashboard } from "./context/DashboardContext";
+import { useShopRegistry } from "../context/ShopRegistryContext";
 import StatCard from "./components/StatCard";
 import ActivityChart from "./components/ActivityChart";
 import CustomerDetailsModal from "./components/CustomerDetailsModal";
@@ -19,6 +20,8 @@ export default function DashboardOverviewPage() {
     getYearlyProfit,
     openModal,
   } = useDashboard();
+
+  const { activeShop } = useShopRegistry();
 
   const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<string | null>(null);
   const [profitPeriod, setProfitPeriod] = useState<"2026-10" | "2026-09" | "2026-year">("2026-10");
@@ -97,10 +100,10 @@ export default function DashboardOverviewPage() {
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold text-[#FFB280] mb-3 border border-white/15">
             <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
-            Khyber General Store • Saddar Road, Peshawar
+            {activeShop ? `${activeShop.name} • ${activeShop.city}` : "Khyber General Store • Saddar Road, Peshawar"}
           </div>
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight mb-2">
-            Welcome back, Haji Abdul Rehman
+            Welcome back, {activeShop?.ownerName || "Haji Abdul Rehman"}
           </h2>
           <p className="text-xs sm:text-sm text-[#C8DCED] leading-relaxed mb-6">
             You have <strong className="text-white font-bold">{activeDebtorsCount} customers</strong> with
