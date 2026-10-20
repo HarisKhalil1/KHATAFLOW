@@ -265,24 +265,60 @@ async function runTests() {
     // TEST 7: Test Delete Confirmation Dialog (Cancel leaves data unchanged)
     // -------------------------------------------------------------
     console.log('\n[TEST 7] Testing Delete Confirmation Dialog and Cancel action...');
-    // Find the row for createdDemoShopId and click "Delete Demo"
-    const clickedDelete = await page.evaluate((shopId) => {
+    // -------------------------------------------------------------
+    // TEST 7: Test Delete Demo Shop action from Shop Details section + Confirmation Dialog
+    // -------------------------------------------------------------
+    console.log('\n[TEST 7] Testing Delete Demo Shop action inside Shop Details section...');
+    // Open Details for createdDemoShopId
+    const clickedDetailsOnDemo = await page.evaluate((shopId) => {
       const rows = Array.from(document.querySelectorAll('tr'));
       const targetRow = rows.find((r) => r.innerText.includes(shopId));
       if (!targetRow) return false;
-      const deleteBtn = Array.from(targetRow.querySelectorAll('button')).find(
-        (b) => b.innerText.includes('Delete Demo')
+      const detailsBtn = Array.from(targetRow.querySelectorAll('button')).find(
+        (b) => b.innerText.trim() === 'Details'
       );
-      if (deleteBtn) {
-        deleteBtn.click();
+      if (detailsBtn) {
+        detailsBtn.click();
         return true;
       }
       return false;
     }, createdDemoShopId);
 
-    if (!clickedDelete) {
-      throw new Error('TEST 7 FAILED: Could not find or click Delete Demo button for demo shop!');
+    if (!clickedDetailsOnDemo) {
+      throw new Error('TEST 7 FAILED: Could not find or click Details button for demo shop!');
     }
+    await new Promise((r) => setTimeout(r, 600));
+
+    // Verify Details section contains "Delete Demo Shop" action
+    const detailsDemoActionData = await page.evaluate(() => {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (!modal) return null;
+      const text = modal.innerText;
+      const hasDemoHeader = text.includes('Admin Demo Testing Shop') || text.includes('ADMIN DEMO TESTING SHOP');
+      const deleteBtn = Array.from(modal.querySelectorAll('button')).find(
+        (b) => b.innerText.includes('Delete Demo Shop')
+      );
+      return {
+        hasDemoHeader,
+        hasDeleteBtn: !!deleteBtn,
+        isBtnDisabled: deleteBtn?.disabled ?? true,
+      };
+    });
+
+    console.log('Shop Details Section Demo Action:', detailsDemoActionData);
+    if (!detailsDemoActionData || !detailsDemoActionData.hasDeleteBtn || detailsDemoActionData.isBtnDisabled) {
+      throw new Error('TEST 7 FAILED: Delete Demo Shop button was not present or was disabled in Shop Details section!');
+    }
+
+    // Click "Delete Demo Shop" from inside the Shop Details section
+    await page.evaluate(() => {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (!modal) return;
+      const deleteBtn = Array.from(modal.querySelectorAll('button')).find(
+        (b) => b.innerText.includes('Delete Demo Shop')
+      );
+      if (deleteBtn) deleteBtn.click();
+    });
     await new Promise((r) => setTimeout(r, 600));
 
     // Verify Confirmation Dialog contents
@@ -299,7 +335,7 @@ async function runTests() {
       };
     }, createdDemoShopId, demoShopName);
 
-    console.log('Delete Confirmation Dialog:', dialogData);
+    console.log('Delete Confirmation Dialog (opened from Details):', dialogData);
     if (!dialogData || !dialogData.hasTitle || !dialogData.hasShopName || !dialogData.hasShopId) {
       throw new Error('TEST 7 FAILED: Delete confirmation dialog missing required shop name or ID!');
     }
@@ -326,22 +362,33 @@ async function runTests() {
     console.log('✓ TEST 7 PASSED: Cancel left all shop data completely unchanged.');
 
     // -------------------------------------------------------------
-    // TEST 8: Test Confirmed Deletion of Demo Shop
+    // TEST 8: Test Confirmed Deletion of Demo Shop from Details action
     // -------------------------------------------------------------
-    console.log('\n[TEST 8] Testing confirmed manual deletion of demo shop...');
-    // Click Delete Demo button again
+    console.log('\n[TEST 8] Testing confirmed manual deletion of demo shop from Details section...');
+    // Open Details again
     await page.evaluate((shopId) => {
       const rows = Array.from(document.querySelectorAll('tr'));
       const targetRow = rows.find((r) => r.innerText.includes(shopId));
       if (!targetRow) return;
-      const deleteBtn = Array.from(targetRow.querySelectorAll('button')).find(
-        (b) => b.innerText.includes('Delete Demo')
+      const detailsBtn = Array.from(targetRow.querySelectorAll('button')).find(
+        (b) => b.innerText.trim() === 'Details'
       );
-      if (deleteBtn) deleteBtn.click();
+      if (detailsBtn) detailsBtn.click();
     }, createdDemoShopId);
     await new Promise((r) => setTimeout(r, 600));
 
-    // Click "Confirm & Delete Demo Shop"
+    // Click Delete Demo Shop in Details modal
+    await page.evaluate(() => {
+      const modal = document.querySelector('.fixed.inset-0');
+      if (!modal) return;
+      const deleteBtn = Array.from(modal.querySelectorAll('button')).find(
+        (b) => b.innerText.includes('Delete Demo Shop')
+      );
+      if (deleteBtn) deleteBtn.click();
+    });
+    await new Promise((r) => setTimeout(r, 600));
+
+    // Click "Confirm & Delete Demo Shop" in confirmation dialog
     await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll('button'));
       const confirmBtn = buttons.find((b) => b.innerText.includes('Confirm & Delete Demo Shop'));

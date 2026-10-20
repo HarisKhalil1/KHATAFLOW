@@ -719,45 +719,66 @@ export default function SuperAdminPage() {
               </div>
 
               {/* Demo Shop Management in Details */}
-              {activeDetailsShop.isDemoCreated && (() => {
-                const eligibility = isShopEligibleForDemoDelete(activeDetailsShop.id);
-                return (
-                  <div className="col-span-2 p-3 bg-red-50/60 rounded-xl border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div>
-                      <span className="text-[10px] font-bold text-red-800 uppercase block tracking-wider">
-                        Admin Demo Testing Shop
-                      </span>
-                      <span className="text-[11px] text-red-950">
-                        {eligibility.eligible
-                          ? "Created via Super Admin demo flow. Can be safely deleted without impacting real shops."
-                          : eligibility.reason}
-                      </span>
+              {activeDetailsShop.isDemoCreated ? (
+                (() => {
+                  const eligibility = isShopEligibleForDemoDelete(activeDetailsShop.id);
+                  return (
+                    <div className="col-span-2 p-3 bg-red-50/60 rounded-xl border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <span className="text-[10px] font-bold text-red-800 uppercase block tracking-wider">
+                          Admin Demo Testing Shop
+                        </span>
+                        <span className="text-[11px] text-red-950">
+                          {eligibility.eligible
+                            ? "Created via Super Admin demo flow. Can be safely deleted without impacting real shops."
+                            : eligibility.reason}
+                        </span>
+                      </div>
+                      {eligibility.eligible ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = activeDetailsShop;
+                            setSelectedShopForDetails(null);
+                            setSelectedShopForDelete(target);
+                          }}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer self-start sm:self-auto shadow-xs transition-colors whitespace-nowrap"
+                        >
+                          Delete Demo Shop
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-3 py-1.5 bg-gray-200 text-gray-500 text-xs font-bold rounded-xl cursor-not-allowed self-start sm:self-auto border border-gray-300 whitespace-nowrap"
+                          title={eligibility.reason}
+                        >
+                          Protected from Deletion 🔒
+                        </button>
+                      )}
                     </div>
-                    {eligibility.eligible ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const target = activeDetailsShop;
-                          setSelectedShopForDetails(null);
-                          setSelectedShopForDelete(target);
-                        }}
-                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer self-start sm:self-auto shadow-xs transition-colors whitespace-nowrap"
-                      >
-                        Delete Demo Shop
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 bg-gray-200 text-gray-500 text-xs font-bold rounded-xl cursor-not-allowed self-start sm:self-auto border border-gray-300 whitespace-nowrap"
-                        title={eligibility.reason}
-                      >
-                        Protected from Deletion 🔒
-                      </button>
-                    )}
+                  );
+                })()
+              ) : (
+                <div className="col-span-2 p-3 bg-[#FCF8F2] rounded-xl border border-[#EADBCA] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#8DA6BC] uppercase block tracking-wider">
+                      Account Type &amp; Deletion Protection
+                    </span>
+                    <span className="text-[11px] text-[#556B82]">
+                      Permanent Store Account. Protected from demo deletion tools.
+                    </span>
                   </div>
-                );
-              })()}
+                  <button
+                    type="button"
+                    disabled
+                    className="px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-bold rounded-xl cursor-not-allowed self-start sm:self-auto border border-gray-200 whitespace-nowrap"
+                    title="Protected original/registered shop. Cannot be deleted via demo cleanup."
+                  >
+                    Protected Shop 🔒
+                  </button>
+                </div>
+              )}
 
               {/* Suspension Details if Suspended */}
               {activeDetailsShop.status === "suspended" && (

@@ -185,11 +185,18 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
             // Check and enforce automatic suspension expiry
             const now = new Date().getTime();
             const checkedShops = parsed.map((s: RegisteredShop) => {
+              const isOriginalShop =
+                s.id === "SHOP-PK-001" || s.id === "SHOP-PK-002" || s.id === "SHOP-PK-003";
+              let updated: RegisteredShop = {
+                ...s,
+                isDemoCreated: isOriginalShop ? false : (s.isDemoCreated ?? false),
+              };
+
               if (s.status === "suspended" && s.suspensionExpiresAt) {
                 const expiryTime = new Date(s.suspensionExpiresAt).getTime();
                 if (now >= expiryTime) {
-                  return {
-                    ...s,
+                  updated = {
+                    ...updated,
                     status: "active" as ShopStatus,
                     suspensionReason: undefined,
                     suspensionExpiresAt: undefined,
@@ -197,7 +204,7 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
                   };
                 }
               }
-              return s;
+              return updated;
             });
             React.startTransition(() => {
               setShops(checkedShops);
