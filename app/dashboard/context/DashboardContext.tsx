@@ -1,7 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from "react";
-import { useShopRegistry } from "../../context/ShopRegistryContext";
+import { useShopRegistry, HARIS_DEMO_SHOP_ID } from "../../context/ShopRegistryContext";
+import {
+  HARIS_DEMO_CUSTOMERS,
+  HARIS_DEMO_BILLS,
+  HARIS_DEMO_TRANSACTIONS,
+  HARIS_DEMO_EXPENSES,
+  HARIS_DEMO_NOTIFICATIONS,
+  HARIS_DEMO_PRODUCTS,
+} from "./harisDemoData";
 
 export type TransactionType = "credit" | "payment" | "adjustment";
 export type ExpenseCategory = "Inventory" | "Rent" | "Utilities" | "Transport" | "Staff" | "Other";
@@ -50,19 +58,7 @@ export interface ProductCatalogItem {
   category?: string;
 }
 
-export const STANDARD_PRODUCTS: ProductCatalogItem[] = [
-  { id: "prod-rice-basmati", name: "Rice (Basmati)", defaultUnit: "kg", defaultRate: 200, category: "Grains" },
-  { id: "prod-rice", name: "Rice", defaultUnit: "kg", defaultRate: 200, category: "Grains" },
-  { id: "prod-dalda-oil", name: "Dalda oil", defaultUnit: "liters", defaultRate: 600, category: "Oils" },
-  { id: "prod-cooking-oil", name: "Cooking Oil", defaultUnit: "liters", defaultRate: 600, category: "Oils" },
-  { id: "prod-eggs", name: "Eggs", defaultUnit: "pieces", defaultRate: 30, category: "Dairy & Poultry" },
-  { id: "prod-chocolate", name: "Chocolate", defaultUnit: "pieces", defaultRate: 50, category: "Confectionery" },
-  { id: "prod-sugar", name: "Sugar", defaultUnit: "kg", defaultRate: 160, category: "Staples" },
-  { id: "prod-wheat-flour", name: "Wheat Flour (Atta)", defaultUnit: "kg", defaultRate: 150, category: "Flour" },
-  { id: "prod-tea", name: "Tea (Tapal Danedar)", defaultUnit: "kg", defaultRate: 1600, category: "Beverages" },
-  { id: "prod-milk", name: "Milk", defaultUnit: "liters", defaultRate: 220, category: "Dairy" },
-  { id: "prod-pulses", name: "Pulses (Daal Chana)", defaultUnit: "kg", defaultRate: 320, category: "Pulses" },
-];
+export const STANDARD_PRODUCTS: ProductCatalogItem[] = [];
 
 export interface CustomerBill {
   id: string;
@@ -325,6 +321,11 @@ interface DashboardContextType {
     success: boolean;
     error?: string;
   };
+  updateProduct: (
+    originalName: string,
+    data: { name: string; defaultUnit: string; defaultRate: number; category?: string }
+  ) => { success: boolean; error?: string };
+  deleteProduct: (productName: string) => { success: boolean };
 
   // Active Modals Control
   activeModal:
@@ -351,525 +352,21 @@ interface DashboardContextType {
   closeModal: () => void;
 }
 
-// Initial realistic demo customers
-// Tariq's original outstanding udhaar is Rs. 15,000, tied to his original itemized bill #BILL-1001.
-const INITIAL_CUSTOMERS: Customer[] = [
-  {
-    id: "cust-1",
-    name: "Tariq Khan (Khan Store)",
-    phone: "0301-5551234",
-    address: "Saddar Road, Shop #14, Peshawar",
-    status: "active",
-    openingBalance: 0,
-    createdAt: "2026-10-01",
-    notes: "Wholesale retail customer. Original Bill #BILL-1001 Rs. 15,000 outstanding.",
-  },
-  {
-    id: "cust-2",
-    name: "Bilal Ahmed (Peshawar Bakers)",
-    phone: "0333-9876543",
-    address: "University Road, Peshawar",
-    status: "active",
-    openingBalance: 5000,
-    createdAt: "2026-09-05",
-    notes: "Buys flour and baking essentials on 15-day credit.",
-  },
-  {
-    id: "cust-3",
-    name: "Haji Usman Shinwari",
-    phone: "0345-1122334",
-    address: "Karkhano Market, Block C, Peshawar",
-    status: "overdue",
-    openingBalance: 20000,
-    createdAt: "2026-08-15",
-    notes: "Follow up required for month-end reconciliation.",
-  },
-  {
-    id: "cust-4",
-    name: "Rashid Mehmood (City Pharmacy)",
-    phone: "0312-4455667",
-    address: "Khyber Bazaar, Peshawar",
-    status: "active",
-    openingBalance: 3000,
-    createdAt: "2026-09-12",
-  },
-  {
-    id: "cust-5",
-    name: "Zubair Afridi (Gul Super Store)",
-    phone: "0300-7788990",
-    address: "Hayatabad Phase 3, Peshawar",
-    status: "cleared",
-    openingBalance: 0,
-    createdAt: "2026-09-20",
-    notes: "Always pays full balance promptly via JazzCash.",
-  },
-  {
-    id: "cust-6",
-    name: "Imran Shah",
-    phone: "0321-3344556",
-    address: "Board Bazaar, Peshawar",
-    status: "active",
-    openingBalance: 8000,
-    createdAt: "2026-09-25",
-  },
-];
-
-// Verified initial store bills as authoritative source of truth for each customer
-const INITIAL_BILLS: CustomerBill[] = [
-  // Tariq Khan (cust-1) - Original Bill #BILL-1001 (Rs. 15,000)
-  {
-    id: "bill-1001",
-    billNo: "BILL-1001",
-    customerId: "cust-1",
-    customerName: "Tariq Khan (Khan Store)",
-    date: "2026-10-01",
-    totalAmount: 15000,
-    totalCost: 11800, // COGS: Rice (3,200) + Oil (4,800) + Eggs (3,800)
-    paidAmount: 0,
-    remainingBalance: 15000,
-    notes: "Original store ledger bill: Rice 2kg, Dalda oil 2kg, Eggs 11 pieces.",
-    items: [
-      {
-        id: "item-rice-1",
-        billId: "bill-1001",
-        name: "Rice",
-        quantity: 2,
-        unit: "kg",
-        unitPrice: 2000,
-        unitCost: 1600,
-        lineTotal: 4000,
-        paidAmount: 0,
-        remainingBalance: 4000,
-      },
-      {
-        id: "item-oil-1",
-        billId: "bill-1001",
-        name: "Dalda oil",
-        quantity: 2,
-        unit: "kg",
-        unitPrice: 3000,
-        unitCost: 2400,
-        lineTotal: 6000,
-        paidAmount: 0,
-        remainingBalance: 6000,
-      },
-      {
-        id: "item-eggs-1",
-        billId: "bill-1001",
-        name: "Eggs",
-        quantity: 11,
-        unit: "pieces",
-        unitPrice: 454.55,
-        unitCost: 345.45,
-        lineTotal: 5000,
-        paidAmount: 0,
-        remainingBalance: 5000,
-      },
-    ],
-  },
-  // Bilal Ahmed (cust-2)
-  {
-    id: "bill-1002",
-    billNo: "REC-1049",
-    customerId: "cust-2",
-    customerName: "Bilal Ahmed (Peshawar Bakers)",
-    date: "2026-10-04",
-    totalAmount: 6200,
-    totalCost: 4836,
-    paidAmount: 3000,
-    remainingBalance: 3200,
-    notes: "Bakery stock: Dry milk powder & baking essentials.",
-    items: [
-      {
-        id: "item-bilal-1",
-        billId: "bill-1002",
-        name: "Dry milk powder",
-        quantity: 4,
-        unit: "kg",
-        unitPrice: 1000,
-        unitCost: 780,
-        lineTotal: 4000,
-        paidAmount: 3000,
-        remainingBalance: 1000,
-      },
-      {
-        id: "item-bilal-2",
-        billId: "bill-1002",
-        name: "Baking flour & yeast",
-        quantity: 11,
-        unit: "packs",
-        unitPrice: 200,
-        unitCost: 156,
-        lineTotal: 2200,
-        paidAmount: 0,
-        remainingBalance: 2200,
-      },
-    ],
-  },
-  // Haji Usman Shinwari (cust-3)
-  {
-    id: "bill-1003",
-    billNo: "REC-1055",
-    customerId: "cust-3",
-    customerName: "Haji Usman Shinwari",
-    date: "2026-10-05",
-    totalAmount: 12000,
-    totalCost: 9360,
-    paidAmount: 6000,
-    remainingBalance: 6000,
-    notes: "Bulk Basmati Rice order.",
-    items: [
-      {
-        id: "item-usman-1",
-        billId: "bill-1003",
-        name: "Basmati Rice (25kg bags)",
-        quantity: 2,
-        unit: "bags",
-        unitPrice: 6000,
-        unitCost: 4680,
-        lineTotal: 12000,
-        paidAmount: 6000,
-        remainingBalance: 6000,
-      },
-    ],
-  },
-  // Rashid Mehmood (cust-4)
-  {
-    id: "bill-1004",
-    billNo: "REC-1061",
-    customerId: "cust-4",
-    customerName: "Rashid Mehmood (City Pharmacy)",
-    date: "2026-10-06",
-    totalAmount: 3800,
-    totalCost: 2964,
-    paidAmount: 2000,
-    remainingBalance: 1800,
-    notes: "Mineral water cartons wholesale.",
-    items: [
-      {
-        id: "item-rashid-1",
-        billId: "bill-1004",
-        name: "Mineral Water (Cartons)",
-        quantity: 19,
-        unit: "cartons",
-        unitPrice: 200,
-        unitCost: 156,
-        lineTotal: 3800,
-        paidAmount: 2000,
-        remainingBalance: 1800,
-      },
-    ],
-  },
-  // Zubair Afridi (cust-5)
-  {
-    id: "bill-1005",
-    billNo: "REC-1068",
-    customerId: "cust-5",
-    customerName: "Zubair Afridi (Gul Super Store)",
-    date: "2026-10-07",
-    totalAmount: 9000,
-    totalCost: 7020,
-    paidAmount: 9000,
-    remainingBalance: 0,
-    notes: "Cooking oil bulk carton.",
-    items: [
-      {
-        id: "item-zubair-1",
-        billId: "bill-1005",
-        name: "Cooking Oil",
-        quantity: 15,
-        unit: "liters",
-        unitPrice: 600,
-        unitCost: 468,
-        lineTotal: 9000,
-        paidAmount: 9000,
-        remainingBalance: 0,
-      },
-    ],
-  },
-  // Imran Shah (cust-6)
-  {
-    id: "bill-1006",
-    billNo: "REC-1075",
-    customerId: "cust-6",
-    customerName: "Imran Shah",
-    date: "2026-10-09",
-    totalAmount: 4500,
-    totalCost: 3510,
-    paidAmount: 1150,
-    remainingBalance: 3350,
-    notes: "Pulses and wheat flour staple items.",
-    items: [
-      {
-        id: "item-imran-1",
-        billId: "bill-1006",
-        name: "Pulses (Daal Chana)",
-        quantity: 10,
-        unit: "kg",
-        unitPrice: 320,
-        unitCost: 250,
-        lineTotal: 3200,
-        paidAmount: 1150,
-        remainingBalance: 2050,
-      },
-      {
-        id: "item-imran-2",
-        billId: "bill-1006",
-        name: "Wheat Flour (Atta)",
-        quantity: 10,
-        unit: "kg",
-        unitPrice: 130,
-        unitCost: 101,
-        lineTotal: 1300,
-        paidAmount: 0,
-        remainingBalance: 1300,
-      },
-    ],
-  },
-];
-
-// Initial Transactions linked with bills
-const INITIAL_TRANSACTIONS: LedgerTransaction[] = [
-  // Tariq Khan: Original Bill #BILL-1001 of Rs. 15,000
-  {
-    id: "tx-tariq-1",
-    customerId: "cust-1",
-    customerName: "Tariq Khan (Khan Store)",
-    type: "credit",
-    amount: 15000,
-    date: "2026-10-01",
-    description: "Original Bill #BILL-1001: Rice (2 kg), Dalda oil (2 kg), Eggs (11 pieces)",
-    receiptNo: "BILL-1001",
-    billId: "bill-1001",
-  },
-  // Bilal Ahmed (Opening 5,000)
-  {
-    id: "tx-4",
-    customerId: "cust-2",
-    customerName: "Bilal Ahmed (Peshawar Bakers)",
-    type: "credit",
-    amount: 6200,
-    date: "2026-10-04",
-    description: "Dry milk powder & baking ingredients",
-    receiptNo: "REC-1049",
-    billId: "bill-1002",
-  },
-  {
-    id: "tx-5",
-    customerId: "cust-2",
-    customerName: "Bilal Ahmed (Peshawar Bakers)",
-    type: "payment",
-    amount: 3000,
-    date: "2026-10-11",
-    description: "Bank transfer via Allied Bank [Allocated: Dry milk powder: Rs. 3,000]",
-    paymentMethod: "Bank Transfer",
-    billId: "bill-1002",
-    itemAllocations: [{ itemId: "item-bilal-1", itemName: "Dry milk powder", allocatedAmount: 3000 }],
-  },
-  // Haji Usman Shinwari (Opening 20,000)
-  {
-    id: "tx-6",
-    customerId: "cust-3",
-    customerName: "Haji Usman Shinwari",
-    type: "credit",
-    amount: 12000,
-    date: "2026-10-05",
-    description: "Bulk Basmati Rice (2 bags 25kg)",
-    receiptNo: "REC-1055",
-    billId: "bill-1003",
-  },
-  {
-    id: "tx-7",
-    customerId: "cust-3",
-    customerName: "Haji Usman Shinwari",
-    type: "payment",
-    amount: 6000,
-    date: "2026-10-12",
-    description: "Direct cash payment via driver [Allocated: Basmati Rice (25kg bags): Rs. 6,000]",
-    paymentMethod: "Cash",
-    billId: "bill-1003",
-    itemAllocations: [{ itemId: "item-usman-1", itemName: "Basmati Rice (25kg bags)", allocatedAmount: 6000 }],
-  },
-  // Rashid Mehmood (Opening 3,000)
-  {
-    id: "tx-8",
-    customerId: "cust-4",
-    customerName: "Rashid Mehmood (City Pharmacy)",
-    type: "credit",
-    amount: 3800,
-    date: "2026-10-06",
-    description: "Beverages and mineral water cartons",
-    receiptNo: "REC-1061",
-    billId: "bill-1004",
-  },
-  {
-    id: "tx-9",
-    customerId: "cust-4",
-    customerName: "Rashid Mehmood (City Pharmacy)",
-    type: "payment",
-    amount: 2000,
-    date: "2026-10-15",
-    description: "JazzCash payment received [Allocated: Mineral Water (Cartons): Rs. 2,000]",
-    paymentMethod: "JazzCash",
-    billId: "bill-1004",
-    itemAllocations: [{ itemId: "item-rashid-1", itemName: "Mineral Water (Cartons)", allocatedAmount: 2000 }],
-  },
-  // Zubair Afridi (Opening 0, purchased 9,000, fully paid 9,000)
-  {
-    id: "tx-10",
-    customerId: "cust-5",
-    customerName: "Zubair Afridi (Gul Super Store)",
-    type: "credit",
-    amount: 9000,
-    date: "2026-10-07",
-    description: "Cooking oil & spices carton",
-    receiptNo: "REC-1068",
-    billId: "bill-1005",
-  },
-  {
-    id: "tx-11",
-    customerId: "cust-5",
-    customerName: "Zubair Afridi (Gul Super Store)",
-    type: "payment",
-    amount: 9000,
-    date: "2026-10-16",
-    description: "Full clearance via EasyPaisa [Allocated: Cooking Oil: Rs. 9,000]",
-    paymentMethod: "EasyPaisa",
-    billId: "bill-1005",
-    itemAllocations: [{ itemId: "item-zubair-1", itemName: "Cooking Oil", allocatedAmount: 9000 }],
-  },
-  // Imran Shah (Opening 8,000)
-  {
-    id: "tx-12",
-    customerId: "cust-6",
-    customerName: "Imran Shah",
-    type: "credit",
-    amount: 4500,
-    date: "2026-10-09",
-    description: "Pulses (Daal Mash, Daal Chana, Chawal)",
-    receiptNo: "REC-1075",
-    billId: "bill-1006",
-  },
-  {
-    id: "tx-13",
-    customerId: "cust-6",
-    customerName: "Imran Shah",
-    type: "payment",
-    amount: 1150,
-    date: "2026-10-17",
-    description: "Cash payment at shop [Allocated: Pulses (Daal Chana): Rs. 1,150]",
-    paymentMethod: "Cash",
-    billId: "bill-1006",
-    itemAllocations: [{ itemId: "item-imran-1", itemName: "Pulses (Daal Chana)", allocatedAmount: 1150 }],
-  },
-];
-
-const INITIAL_EXPENSES: Expense[] = [
-  {
-    id: "exp-1",
-    description: "Wholesale stock restock (Ganj Mandi Peshawar)",
-    category: "Inventory",
-    amount: 48500,
-    date: "2026-10-03",
-    paymentMethod: "Bank Transfer",
-    notes: "Stock inventory purchase — balance sheet asset, not operating overhead",
-  },
-  {
-    id: "exp-2",
-    description: "Monthly shop rent (Saddar Plaza)",
-    category: "Rent",
-    amount: 25000,
-    date: "2026-10-01",
-    paymentMethod: "Cash",
-    notes: "Receipt #449 from building management",
-  },
-  {
-    id: "exp-3",
-    description: "PESCO Electricity Bill (Shop meter)",
-    category: "Utilities",
-    amount: 7850,
-    date: "2026-10-10",
-    paymentMethod: "EasyPaisa",
-  },
-  {
-    id: "exp-4",
-    description: "Goods transport from Ring Road warehouse",
-    category: "Transport",
-    amount: 2200,
-    date: "2026-10-05",
-    paymentMethod: "Cash",
-    notes: "Suzuki pickup fare",
-  },
-  {
-    id: "exp-5",
-    description: "Shop assistant weekly allowance (Ahmad)",
-    category: "Staff",
-    amount: 5000,
-    date: "2026-10-12",
-    paymentMethod: "Cash",
-  },
-  {
-    id: "exp-6",
-    description: "Generator fuel and maintenance",
-    category: "Utilities",
-    amount: 3500,
-    date: "2026-10-15",
-    paymentMethod: "Cash",
-  },
-];
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "notif-1",
-    title: "High Udhaar Balance Alert",
-    message: "Haji Usman Shinwari currently has Rs. 26,000 outstanding credit.",
-    time: "2 hours ago",
-    type: "alert",
-    read: false,
-  },
-  {
-    id: "notif-2",
-    title: "Payment Received",
-    message: "Imran Shah made a cash payment of Rs. 1,150.",
-    time: "Yesterday",
-    type: "payment",
-    read: false,
-  },
-  {
-    id: "notif-3",
-    title: "Account Cleared",
-    message: "Zubair Afridi fully paid Rs. 9,000 via EasyPaisa. Balance is Rs. 0.",
-    time: "2 days ago",
-    type: "info",
-    read: true,
-  },
-];
-
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
 const STORAGE_KEY = "KHATAFLOW_STORAGE_V3";
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const { activeShopId } = useShopRegistry();
-  const currentStorageKey = activeShopId === "SHOP-PK-001" ? STORAGE_KEY : `KHATAFLOW_STORAGE_${activeShopId}`;
+  const currentStorageKey = activeShopId ? `KHATAFLOW_STORAGE_${activeShopId}` : STORAGE_KEY;
 
   const [products, setProducts] = useState<ProductCatalogItem[]>(() => STANDARD_PRODUCTS);
-  const [customers, setCustomers] = useState<Customer[]>(() =>
-    activeShopId === "SHOP-PK-001" ? INITIAL_CUSTOMERS : []
-  );
-  const [bills, setBills] = useState<CustomerBill[]>(() =>
-    activeShopId === "SHOP-PK-001" ? INITIAL_BILLS : []
-  );
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [bills, setBills] = useState<CustomerBill[]>([]);
   const [adjustments, setAdjustments] = useState<ItemAdjustment[]>([]);
-  const [transactions, setTransactions] = useState<LedgerTransaction[]>(() =>
-    activeShopId === "SHOP-PK-001" ? INITIAL_TRANSACTIONS : []
-  );
-  const [expenses, setExpenses] = useState<Expense[]>(() =>
-    activeShopId === "SHOP-PK-001" ? INITIAL_EXPENSES : []
-  );
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
-    activeShopId === "SHOP-PK-001" ? INITIAL_NOTIFICATIONS : []
-  );
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Restore persistent state from localStorage on client mount
@@ -877,9 +374,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     try {
       if (typeof window !== "undefined") {
         const raw = window.localStorage.getItem(currentStorageKey);
+        let loaded = false;
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.version === 1) {
+          if (parsed && parsed.version === 1 && Array.isArray(parsed.customers) && parsed.customers.length > 0) {
+            loaded = true;
             queueMicrotask(() => {
               if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
               if (Array.isArray(parsed.bills)) setBills(parsed.bills);
@@ -888,6 +387,29 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               if (Array.isArray(parsed.expenses)) setExpenses(parsed.expenses);
               if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
               if (Array.isArray(parsed.products) && parsed.products.length > 0) setProducts(parsed.products);
+            });
+          }
+        }
+        if (!loaded) {
+          if (activeShopId === HARIS_DEMO_SHOP_ID) {
+            queueMicrotask(() => {
+              setCustomers(HARIS_DEMO_CUSTOMERS);
+              setBills(HARIS_DEMO_BILLS);
+              setAdjustments([]);
+              setTransactions(HARIS_DEMO_TRANSACTIONS);
+              setExpenses(HARIS_DEMO_EXPENSES);
+              setNotifications(HARIS_DEMO_NOTIFICATIONS);
+              setProducts(HARIS_DEMO_PRODUCTS);
+            });
+          } else {
+            queueMicrotask(() => {
+              setCustomers([]);
+              setBills([]);
+              setAdjustments([]);
+              setTransactions([]);
+              setExpenses([]);
+              setNotifications([]);
+              setProducts(STANDARD_PRODUCTS);
             });
           }
         }
@@ -1493,6 +1015,56 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const updateProduct = useCallback(
+    (
+      originalName: string,
+      data: { name: string; defaultUnit: string; defaultRate: number; category?: string }
+    ) => {
+      const orig = originalName.trim().toLowerCase();
+      const newName = data.name.trim();
+      if (!newName) {
+        return { success: false, error: "Item name cannot be empty." };
+      }
+      const rate = Number(data.defaultRate);
+      if (isNaN(rate) || rate <= 0) {
+        return { success: false, error: "Default price must be greater than zero." };
+      }
+      const unit = data.defaultUnit.trim() || "pieces";
+
+      let found = false;
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.name.toLowerCase() === orig) {
+            found = true;
+            return {
+              ...p,
+              name: newName,
+              defaultUnit: unit,
+              defaultRate: rate,
+              category: data.category || p.category,
+            };
+          }
+          return p;
+        })
+      );
+
+      if (!found) {
+        return { success: false, error: `Item "${originalName}" not found.` };
+      }
+      return { success: true };
+    },
+    []
+  );
+
+  const deleteProduct = useCallback(
+    (productName: string) => {
+      const trimmed = productName.trim().toLowerCase();
+      setProducts((prev) => prev.filter((p) => p.name.toLowerCase() !== trimmed));
+      return { success: true };
+    },
+    []
+  );
+
   // Add Customer action
   const addCustomer = useCallback(
     (data: {
@@ -1509,12 +1081,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: "Customer name must be at least 2 characters long." };
       }
 
-      const phoneRegex = /^((\+92)|(0092)|(0))?3[0-9]{2}-?[0-9]{7}$/;
-      if (!phoneRegex.test(trimmedPhone.replace(/\s+/g, ""))) {
-        return {
-          success: false,
-          error: "Please enter a valid Pakistani phone number (e.g., 0300-1234567 or 03211234567).",
-        };
+      if (trimmedPhone) {
+        const digitsOnly = trimmedPhone.replace(/\D/g, "");
+        if (digitsOnly.length > 0 && digitsOnly.length < 5) {
+          return {
+            success: false,
+            error: "Please enter a valid phone number (at least 5 digits) or leave blank.",
+          };
+        }
       }
 
       const openBal = Number(data.openingBalance) || 0;
@@ -1733,12 +1307,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.phone !== undefined) {
-        const phoneRegex = /^((\+92)|(0092)|(0))?3[0-9]{2}-?[0-9]{7}$/;
-        if (!phoneRegex.test(data.phone.trim().replace(/\s+/g, ""))) {
-          return {
-            success: false,
-            error: "Please enter a valid Pakistani phone number (e.g., 0300-1234567 or 03211234567).",
-          };
+        const trimmedPhone = data.phone.trim();
+        if (trimmedPhone) {
+          const digitsOnly = trimmedPhone.replace(/\D/g, "");
+          if (digitsOnly.length > 0 && digitsOnly.length < 5) {
+            return {
+              success: false,
+              error: "Please enter a valid phone number (at least 5 digits) or leave blank.",
+            };
+          }
         }
       }
 
@@ -1868,6 +1445,27 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Determine effective item allocations: use explicit allocations if provided, otherwise auto-allocate FIFO
+      let effectiveAllocations = data.itemAllocations;
+      if (!effectiveAllocations || effectiveAllocations.length === 0) {
+        let remainingToAllocate = numAmount;
+        effectiveAllocations = [];
+        const candidateBills = targetBill ? [targetBill] : custBills;
+        for (const b of candidateBills) {
+          for (const it of b.items) {
+            if (it.remainingBalance > 0 && remainingToAllocate > 0) {
+              const allocAmt = Math.min(it.remainingBalance, remainingToAllocate);
+              effectiveAllocations.push({
+                itemId: it.id,
+                itemName: it.name,
+                allocatedAmount: allocAmt,
+              });
+              remainingToAllocate -= allocAmt;
+            }
+          }
+        }
+      }
+
       // Update bill and items with precision
       setBills((prevBills) =>
         prevBills.map((b) => {
@@ -1876,7 +1474,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
           // 1. Update items that received allocations
           const updatedItems = b.items.map((it) => {
-            const matchedAlloc = data.itemAllocations?.find((a) => a.itemId === it.id);
+            const matchedAlloc = effectiveAllocations?.find((a) => a.itemId === it.id);
             if (!matchedAlloc || matchedAlloc.allocatedAmount <= 0) return it;
             const newPaid = it.paidAmount + matchedAlloc.allocatedAmount;
             const newRemaining = Math.max(0, it.lineTotal - newPaid);
@@ -1888,7 +1486,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           });
 
           // 2. Update bill-level payment and outstanding balance
-          // Formula: Outstanding = Bill Total - Total Valid Payments!
           const newTotalPaid = b.paidAmount + numAmount;
           const newTotalRemaining = Math.max(0, b.totalAmount - newTotalPaid);
           const customerCredit = Math.max(0, newTotalPaid - b.totalAmount);
@@ -1906,8 +1503,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       // Build descriptive line mentioning allocation breakdown if present
       let finalDescription = data.description?.trim();
       if (!finalDescription) {
-        if (data.itemAllocations && data.itemAllocations.length > 0) {
-          const allocationNotes = data.itemAllocations
+        if (effectiveAllocations && effectiveAllocations.length > 0) {
+          const allocationNotes = effectiveAllocations
             .filter((a) => a.allocatedAmount > 0)
             .map((a) => `${a.itemName}: Rs. ${a.allocatedAmount.toLocaleString()}`)
             .join(", ");
@@ -1927,7 +1524,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         date: data.date || new Date().toISOString().split("T")[0],
         description: finalDescription,
         paymentMethod: data.paymentMethod,
-        itemAllocations: data.itemAllocations,
+        itemAllocations: effectiveAllocations,
         billId: targetBill?.id,
       };
 
@@ -2187,23 +1784,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         .filter((t) => t.type === "credit")
         .reduce((sum, t) => sum + t.amount, 0);
 
-      // Estimated cash counter sales for Peshawar retail store in this month
-      const isDemoStore = activeShopId === "SHOP-PK-001" && bills.length > 0;
-      const cashCounterSales = isDemoStore
-        ? (monthStr === "2026-10" ? 95000 : monthStr === "2026-09" ? 88000 : 82000)
-        : 0;
-      const totalSales = creditSales + cashCounterSales;
+      const totalSales = creditSales;
 
       // COGS Calculation:
       // Itemized bills provide verified wholesale cost
-      // Tariq's bill: Rs. 15,000 sales -> Rs. 11,800 cost (COGS margin 78.6%)
-      // Remaining sales estimated at standard retail wholesale cost ratio (78%)
       const itemizedBillInMonth = bills.filter((b) => b.date.startsWith(monthStr));
       const itemizedSales = itemizedBillInMonth.reduce((sum, b) => sum + b.totalAmount, 0);
       const itemizedCost = itemizedBillInMonth.reduce((sum, b) => sum + b.totalCost, 0);
 
       const unItemizedSales = Math.max(0, totalSales - itemizedSales);
-      // Average wholesale cost factor in Peshawar consumer staples is ~78%
       const unItemizedCost = Math.round(unItemizedSales * 0.78);
 
       const totalCogs = itemizedCost + unItemizedCost;
@@ -2233,17 +1822,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         monthLabel,
         totalSales,
         cogs: totalCogs,
-        hasReliableCostData: true,
+        hasReliableCostData: bills.length > 0,
         grossProfit,
         operatingExpenses,
         netProfit,
         outstandingUdhaar: totalOutstandingCredit,
         paymentsReceived,
         missingDataNotice:
-          "Accrual accounting applied: Sales include both counter cash sales and new credit bills. COGS represents wholesale stock cost. Cash receipts and outstanding udhaar are tracked separately from net profit.",
+          "Accrual accounting applied: Sales reflect credit bills and transactions. Wholesale stock cost and cash collections are tracked accurately.",
       };
     },
-    [transactions, expenses, bills, totalOutstandingCredit, activeShopId]
+    [transactions, expenses, bills, totalOutstandingCredit]
   );
 
   const getYearlyProfit = useCallback(
@@ -2254,60 +1843,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         return `${yearStr}-${m}`;
       });
 
-      // We only have active data up to month 10 (October 2026)
-      const monthlySummaries: MonthlyFinancialSummary[] = months.map((mStr, idx) => {
-        if (mStr === "2026-10") {
-          return getMonthlyProfit(mStr);
-        }
-        if (mStr === "2026-09") {
-          return {
-            month: mStr,
-            monthLabel: "September 2026",
-            totalSales: 138500,
-            cogs: 108000,
-            hasReliableCostData: true,
-            grossProfit: 30500,
-            operatingExpenses: 41200,
-            netProfit: -10700,
-            outstandingUdhaar: 42000,
-            paymentsReceived: 56000,
-          };
-        }
-        if (idx < 9) {
-          // Historical months Jan-Aug 2026 demo baseline
-          const s = 120000 + (idx * 3000);
-          const c = Math.round(s * 0.78);
-          const g = s - c;
-          const e = 38000 + (idx * 500);
-          return {
-            month: mStr,
-            monthLabel: `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][idx]} ${yearStr}`,
-            totalSales: s,
-            cogs: c,
-            hasReliableCostData: true,
-            grossProfit: g,
-            operatingExpenses: e,
-            netProfit: g - e,
-            outstandingUdhaar: 35000 + (idx * 1000),
-            paymentsReceived: 45000 + (idx * 1500),
-          };
-        }
-        // Future months Nov-Dec
-        return {
-          month: mStr,
-          monthLabel: `${["Nov", "Dec"][idx - 10]} ${yearStr}`,
-          totalSales: 0,
-          cogs: 0,
-          hasReliableCostData: false,
-          grossProfit: 0,
-          operatingExpenses: 0,
-          netProfit: 0,
-          outstandingUdhaar: 0,
-          paymentsReceived: 0,
-        };
-      });
+      const monthlySummaries: MonthlyFinancialSummary[] = months.map((mStr) =>
+        getMonthlyProfit(mStr)
+      );
 
-      const activeMonths = monthlySummaries.filter((m) => m.totalSales > 0);
+      const activeMonths = monthlySummaries.filter((m) => m.totalSales > 0 || m.operatingExpenses > 0);
       const totalSales = activeMonths.reduce((sum, m) => sum + m.totalSales, 0);
       const cogs = activeMonths.reduce((sum, m) => sum + m.cogs, 0);
       const grossProfit = totalSales - cogs;
@@ -2327,11 +1867,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         paymentsReceived,
         monthlyBreakdown: monthlySummaries,
         priorYearComparison: {
-          year: "2025",
-          totalSales: 1350000,
-          grossProfit: 297000,
-          operatingExpenses: 440000,
-          netProfit: -143000,
+          year: (parseInt(yearStr, 10) - 1).toString(),
+          totalSales: 0,
+          grossProfit: 0,
+          operatingExpenses: 0,
+          netProfit: 0,
         },
       };
     },
@@ -2344,22 +1884,22 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const resetDemoData = useCallback(() => {
     try {
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && currentStorageKey) {
         window.localStorage.removeItem(currentStorageKey);
       }
     } catch (e) {
       console.warn("Could not clear localStorage:", e);
     }
-    if (activeShopId === "SHOP-PK-001") {
-      setProducts(STANDARD_PRODUCTS);
-      setCustomers(INITIAL_CUSTOMERS);
-      setBills(INITIAL_BILLS);
+    if (activeShopId === HARIS_DEMO_SHOP_ID) {
+      setProducts(HARIS_DEMO_PRODUCTS);
+      setCustomers(HARIS_DEMO_CUSTOMERS);
+      setBills(HARIS_DEMO_BILLS);
       setAdjustments([]);
-      setTransactions(INITIAL_TRANSACTIONS);
-      setExpenses(INITIAL_EXPENSES);
-      setNotifications(INITIAL_NOTIFICATIONS);
+      setTransactions(HARIS_DEMO_TRANSACTIONS);
+      setExpenses(HARIS_DEMO_EXPENSES);
+      setNotifications(HARIS_DEMO_NOTIFICATIONS);
     } else {
-      setProducts(STANDARD_PRODUCTS);
+      setProducts([]);
       setCustomers([]);
       setBills([]);
       setAdjustments([]);
@@ -2368,7 +1908,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setNotifications([]);
     }
     closeModal();
-  }, [activeShopId, currentStorageKey, closeModal]);
+  }, [currentStorageKey, activeShopId, closeModal]);
 
   return (
     <DashboardContext.Provider
@@ -2376,6 +1916,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         products,
         addProduct,
         updateProductPrice,
+        updateProduct,
+        deleteProduct,
         customers,
         bills,
         adjustments,

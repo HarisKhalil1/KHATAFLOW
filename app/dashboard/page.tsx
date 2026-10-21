@@ -50,7 +50,7 @@ export default function DashboardOverviewPage() {
           grossProfit: yearlyProfit.grossProfit,
           expenses: yearlyProfit.operatingExpenses,
           netProfit: yearlyProfit.netProfit,
-          comparisonLabel: "+14.8% vs 2025 Annual",
+          comparisonLabel: "Annual summary",
           isPositiveComparison: true,
         }
       : profitPeriod === "2026-09"
@@ -61,7 +61,7 @@ export default function DashboardOverviewPage() {
           grossProfit: prevMonthProfit.grossProfit,
           expenses: prevMonthProfit.operatingExpenses,
           netProfit: prevMonthProfit.netProfit,
-          comparisonLabel: "Previous closed month",
+          comparisonLabel: "Previous billing period",
           isPositiveComparison: false,
         }
       : {
@@ -71,7 +71,10 @@ export default function DashboardOverviewPage() {
           grossProfit: currentMonthProfit.grossProfit,
           expenses: currentMonthProfit.operatingExpenses,
           netProfit: currentMonthProfit.netProfit,
-          comparisonLabel: `+Rs. ${(currentMonthProfit.totalSales - prevMonthProfit.totalSales).toLocaleString()} vs Sep`,
+          comparisonLabel:
+            prevMonthProfit.totalSales > 0
+              ? `+Rs. ${(currentMonthProfit.totalSales - prevMonthProfit.totalSales).toLocaleString()} vs Sep`
+              : "Current billing period",
           isPositiveComparison: currentMonthProfit.totalSales >= prevMonthProfit.totalSales,
         };
 
@@ -100,10 +103,10 @@ export default function DashboardOverviewPage() {
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold text-[#FFB280] mb-3 border border-white/15">
             <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
-            {activeShop ? `${activeShop.name} • ${activeShop.city}` : "Khyber General Store • Saddar Road, Peshawar"}
+            {activeShop ? `${activeShop.name} • ${activeShop.city}` : "KhataFlow Shop"}
           </div>
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight mb-2">
-            Welcome back, {activeShop?.ownerName || "Haji Abdul Rehman"}
+            Welcome back, {activeShop?.ownerName || "Shop Owner"}
           </h2>
           <p className="text-xs sm:text-sm text-[#C8DCED] leading-relaxed mb-6">
             You have <strong className="text-white font-bold">{activeDebtorsCount} customers</strong> with
@@ -151,6 +154,12 @@ export default function DashboardOverviewPage() {
             >
               <span>− Add Expense</span>
             </button>
+            <Link
+              href="/dashboard/items"
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl backdrop-blur-md border border-white/20 transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span>📦 Items & Rates</span>
+            </Link>
           </div>
         </div>
       </div>

@@ -58,6 +58,7 @@ export default function CustomersAndKhataPage() {
         </div>
 
         <button
+          id="btn-add-customer-top"
           type="button"
           onClick={() => openModal("customer")}
           className="px-4 py-2.5 bg-gradient-to-r from-[#FF6A00] to-[#FF7E1F] hover:from-[#E85E00] hover:to-[#FF6A00] text-white text-xs font-bold rounded-xl shadow-md shadow-[#FF6A00]/25 transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -202,7 +203,9 @@ export default function CustomersAndKhataPage() {
           <p className="text-xs text-[#556B82] max-w-sm mx-auto mb-4">
             {statusFilter === "archived"
               ? "When customers are safely archived, they appear here preserving their full history."
-              : `No customers match "${searchQuery}". Try a different search term or add a new customer.`}
+              : searchQuery
+              ? `No customers match "${searchQuery}". Try a different search term or add a new customer.`
+              : "No customers registered yet. Click '+ Add New Customer' to add your first customer."}
           </p>
           <button
             type="button"

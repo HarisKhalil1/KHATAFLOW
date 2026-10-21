@@ -454,8 +454,18 @@ export default function SuperAdminPage() {
             <tbody className="divide-y divide-[#F0E4D4]">
               {filteredShops.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-xs text-[#556B82]">
-                    No shops found matching your search or filters.
+                  <td colSpan={7} className="py-12 text-center text-xs text-[#556B82]">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <span className="text-3xl">🏬</span>
+                      <div className="font-extrabold text-kf-navy text-sm">
+                        {shops.length === 0 ? "No Registered Shops" : "No Matching Shops Found"}
+                      </div>
+                      <p className="text-xs text-[#6F8599] max-w-sm">
+                        {shops.length === 0
+                          ? "The Shop Directory is clean. Click \"+ Register New Shop (Admin)\" above to create your first shop account."
+                          : "No shops matched your search query or selected filters. Try adjusting your search."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -465,7 +475,14 @@ export default function SuperAdminPage() {
                       {shop.id}
                     </td>
                     <td className="py-3.5 px-4 font-bold text-kf-navy">
-                      <div>{shop.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span>{shop.name}</span>
+                        {(shop.isDemoCreated || shop.id === "SHOP-PK-HARIS") && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                            DEMO
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] font-normal text-[#6F8599]">
                         Owner: {shop.ownerName}
                       </div>
@@ -663,8 +680,8 @@ export default function SuperAdminPage() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-[#EADBCA]">
-                  <span className="font-mono font-black text-base sm:text-lg text-kf-navy tracking-wider select-all">
+                <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-[#EADBCA] min-w-0">
+                  <span className="font-mono font-black text-sm sm:text-base md:text-lg text-kf-navy tracking-wider select-all break-all">
                     {activeDetailsShop.claimCode || "Generating..."}
                   </span>
                   <button
@@ -1242,8 +1259,7 @@ export default function SuperAdminPage() {
             <p className="text-xs text-[#556B82] leading-relaxed">
               Are you sure you want to permanently delete this demo shop?
               Only this specific demo shop and its isolated demo records will be removed.
-              Original shops (<code>SHOP-PK-001</code>, <code>SHOP-PK-002</code>, <code>SHOP-PK-003</code>),
-              genuine registered shop accounts, customer debts, and financial ledgers are completely protected and unaffected.
+              Genuine registered shop accounts, customer debts, and financial ledgers are completely protected and unaffected.
             </p>
 
             <div className="pt-2 flex justify-end gap-2.5">

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useDashboard } from "../context/DashboardContext";
+import { useShopRegistry } from "../../context/ShopRegistryContext";
 
 export default function SettingsPage() {
   const {
@@ -14,12 +15,13 @@ export default function SettingsPage() {
     products,
     resetDemoData,
   } = useDashboard();
+  const { activeShop } = useShopRegistry();
 
   const [resetSuccess, setResetSuccess] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const handleReset = () => {
-    if (window.confirm("Are you sure you want to reset all data back to the default demo store state?")) {
+    if (window.confirm("Are you sure you want to clear this shop's local records?")) {
       resetDemoData();
       setResetSuccess(true);
       setTimeout(() => setResetSuccess(false), 3000);
@@ -30,7 +32,7 @@ export default function SettingsPage() {
   const handleExportJSON = () => {
     const backupData = {
       version: "1.0",
-      shopName: "Khyber General Store",
+      shopName: activeShop?.name || "KhataFlow Store",
       exportedAt: new Date().toISOString(),
       customers: customersWithBalances,
       bills,
@@ -124,7 +126,7 @@ export default function SettingsPage() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
-          <span>Demo dataset successfully reset to initial verified Peshawar store state!</span>
+          <span>Shop dataset successfully reset!</span>
         </div>
       )}
 
@@ -208,7 +210,7 @@ export default function SettingsPage() {
             <input
               type="text"
               readOnly
-              value="Khyber General Store"
+              value={activeShop?.name || "Unassigned Store"}
               className="w-full h-11 px-3 bg-[#FCF8F2] border border-[#EADBCA] rounded-xl text-xs font-bold text-kf-navy cursor-default"
             />
           </div>
@@ -218,7 +220,7 @@ export default function SettingsPage() {
             <input
               type="text"
               readOnly
-              value="Haji Abdul Rehman"
+              value={activeShop?.ownerName || "Shop Owner"}
               className="w-full h-11 px-3 bg-[#FCF8F2] border border-[#EADBCA] rounded-xl text-xs font-bold text-kf-navy cursor-default"
             />
           </div>
@@ -228,7 +230,7 @@ export default function SettingsPage() {
             <input
               type="text"
               readOnly
-              value="Shop #12, Saddar Road, Peshawar Cantonment"
+              value={activeShop?.address || activeShop?.city || "Registered Store Location"}
               className="w-full h-11 px-3 bg-[#FCF8F2] border border-[#EADBCA] rounded-xl text-xs font-medium text-kf-navy cursor-default"
             />
           </div>
@@ -238,7 +240,7 @@ export default function SettingsPage() {
             <input
               type="text"
               readOnly
-              value="0300-9876543"
+              value={activeShop?.ownerPhone || "No contact phone"}
               className="w-full h-11 px-3 bg-[#FCF8F2] border border-[#EADBCA] rounded-xl text-xs font-medium text-kf-navy cursor-default"
             />
           </div>
@@ -262,20 +264,20 @@ export default function SettingsPage() {
           <div>
             <label className="block text-xs font-bold text-[#556B82] mb-1">Primary Region</label>
             <div className="h-11 px-3 bg-[#FCF8F2] border border-[#EADBCA] rounded-xl text-xs font-bold text-kf-navy flex items-center">
-              Peshawar, Khyber Pakhtunkhwa (PK)
+              {activeShop?.city ? `${activeShop.city}, Pakistan (PK)` : "Pakistan (PK)"}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Demo Controls & Data Reset */}
+      {/* Data Controls & Reset */}
       <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#EADBCA] shadow-xs space-y-4">
         <h3 className="text-sm font-extrabold text-kf-navy pb-3 border-b border-[#F0E4D4]">
           Storage Persistence &amp; Reset
         </h3>
 
         <p className="text-xs text-[#556B82] leading-relaxed">
-          KhataFlow stores your live transactions in versioned browser local storage so your data remains preserved across reloads and refreshes. Clicking the button below will clear saved changes and re-initialize the original demo store dataset.
+          KhataFlow stores your live transactions in versioned browser local storage so your data remains preserved across reloads and refreshes. Clicking the button below will clear saved changes for this shop.
         </p>
 
         <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -288,7 +290,7 @@ export default function SettingsPage() {
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
               <path d="M3 3v5h5" />
             </svg>
-            <span>Reset Demo Data</span>
+            <span>Clear Shop Data</span>
           </button>
 
           <Link

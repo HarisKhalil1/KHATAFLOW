@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "../context/LanguageContext";
 import { useShopRegistry, ShopCategory } from "../context/ShopRegistryContext";
@@ -48,10 +48,29 @@ export default function LoginCard() {
     claimCode: "",
   });
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
+  const regSuccessTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clean up any running auto-dismiss timer on unmount
+  useEffect(() => {
+    return () => {
+      if (regSuccessTimerRef.current) {
+        clearTimeout(regSuccessTimerRef.current);
+      }
+    };
+  }, []);
+
+  const clearRegSuccess = () => {
+    if (regSuccessTimerRef.current) {
+      clearTimeout(regSuccessTimerRef.current);
+      regSuccessTimerRef.current = null;
+    }
+    setRegSuccess(null);
+  };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setNotification(null);
+    clearRegSuccess();
 
     const res = login(email, password, selectedRole);
     if (!res.success) {
@@ -75,7 +94,7 @@ export default function LoginCard() {
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setNotification(null);
-    setRegSuccess(null);
+    clearRegSuccess();
 
     const res = registerShopByOwner({
       mode: regSubMode,
@@ -93,11 +112,42 @@ export default function LoginCard() {
     });
 
     if (res.success && res.shop) {
-      setRegSuccess(`✓ ${res.message} Opening your dashboard...`);
-      setNotification(null);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 1200);
+      if (res.shop.status === "pending-verification") {
+        setRegSuccess(res.message);
+        setNotification(null);
+
+        // Auto-dismiss registration success message after 5 seconds
+        if (regSuccessTimerRef.current) {
+          clearTimeout(regSuccessTimerRef.current);
+        }
+        regSuccessTimerRef.current = setTimeout(() => {
+          setRegSuccess(null);
+          regSuccessTimerRef.current = null;
+        }, 5000);
+
+        // Switch back to login form after 3 seconds with owner's username prefilled
+        setTimeout(() => {
+          setAuthMode("login");
+          setSelectedRole("shop-owner");
+          setEmail(res.shop?.ownerUsername || "");
+          setPassword("");
+        }, 3000);
+      } else {
+        setRegSuccess(`${res.message} Opening your dashboard...`);
+        setNotification(null);
+
+        if (regSuccessTimerRef.current) {
+          clearTimeout(regSuccessTimerRef.current);
+        }
+        regSuccessTimerRef.current = setTimeout(() => {
+          setRegSuccess(null);
+          regSuccessTimerRef.current = null;
+        }, 5000);
+
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1200);
+      }
     } else {
       setNotification(res.message);
     }
@@ -138,12 +188,14 @@ export default function LoginCard() {
           aria-label="Login role selection"
         >
           <button
+            id="role-tab-shop-owner"
             type="button"
             role="radio"
             aria-checked={selectedRole === "shop-owner"}
             onClick={() => {
               setSelectedRole("shop-owner");
               setNotification(null);
+              clearRegSuccess();
             }}
             className={`flex-1 h-full flex items-center justify-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
               selectedRole === "shop-owner"
@@ -154,12 +206,14 @@ export default function LoginCard() {
             {t.login.shopOwner}
           </button>
           <button
+            id="role-tab-super-admin"
             type="button"
             role="radio"
             aria-checked={selectedRole === "super-admin"}
             onClick={() => {
               setSelectedRole("super-admin");
               setNotification(null);
+              clearRegSuccess();
             }}
             className={`flex-1 h-full flex items-center justify-center text-xs font-semibold rounded-lg transition-all cursor-pointer ${
               selectedRole === "super-admin"
@@ -175,6 +229,7 @@ export default function LoginCard() {
       {/* Inline Notification Banner */}
       {notification && (
         <div
+          id="login-notification-banner"
           role="status"
           className="mb-4 p-2.5 bg-kf-orange-50 border border-kf-orange/20 rounded-xl text-xs text-kf-navy flex items-start gap-2 animate-in fade-in duration-200"
         >
@@ -195,14 +250,38 @@ export default function LoginCard() {
         </div>
       )}
 
-      {/* Registration Success Banner */}
+      {/* Registration Success Banner (Auto-dismisses after ~5 seconds) */}
       {regSuccess && (
         <div
+          id="reg-success-banner"
           role="status"
-          className="mb-4 p-2.5 bg-green-50 border border-green-200 rounded-xl text-xs text-green-900 font-bold flex items-start gap-2 animate-in fade-in duration-200"
+          className="mb-4 p-2.5 bg-green-50 border border-green-200 rounded-xl text-xs text-green-900 font-bold flex items-start justify-between gap-2 animate-in fade-in duration-200"
         >
-          <span>✓</span>
-          <span className="leading-snug">{regSuccess}</span>
+          <div className="flex items-start gap-2">
+            <span className="text-green-700 flex-shrink-0 mt-0.5">✓</span>
+            <span className="leading-snug">{regSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={clearRegSuccess}
+            className="text-green-700 hover:text-green-950 cursor-pointer flex-shrink-0 p-0.5 rounded transition-colors"
+            title="Dismiss message"
+            aria-label="Dismiss message"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -356,6 +435,7 @@ export default function LoginCard() {
 
           {/* Login Button */}
           <button
+            id="btn-login-submit"
             type="submit"
             className="w-full h-10 sm:h-11 bg-gradient-to-r from-[#FF6A00] to-[#FF7708] hover:from-[#E85E00] hover:to-[#FF6A00] text-white font-bold text-sm rounded-xl shadow-[0_4px_16px_rgba(255,106,0,0.32)] flex items-center justify-center gap-2 cursor-pointer transition-all group mt-2"
           >
@@ -377,6 +457,42 @@ export default function LoginCard() {
               <path d="m12 5 7 7-7 7" />
             </svg>
           </button>
+
+          {/* Quick Demo Access Buttons */}
+          <div className="pt-1.5">
+            {selectedRole === "shop-owner" ? (
+              <button
+                id="quick-demo-shop-owner"
+                type="button"
+                onClick={() => {
+                  setSelectedRole("shop-owner");
+                  setEmail("haris@khataflow.pk");
+                  setPassword("haris123");
+                  setNotification("Demo credentials filled: haris@khataflow.pk / demo password");
+                  clearRegSuccess();
+                }}
+                className="w-full py-2 px-3 bg-[#FFF3E6] hover:bg-[#FFE6CC] border border-[#FFD0A6] text-[#A34700] rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span className="w-2 h-2 rounded-full bg-kf-orange animate-pulse" />
+                <span>Quick Demo Fill: Haris Khan Store (Shop Owner)</span>
+              </button>
+            ) : (
+              <button
+                id="quick-demo-super-admin"
+                type="button"
+                onClick={() => {
+                  setSelectedRole("super-admin");
+                  setEmail("admin@khataflow.pk");
+                  setPassword("admin123");
+                  setNotification("Super Admin credentials filled: admin@khataflow.pk / admin123");
+                  clearRegSuccess();
+                }}
+                className="w-full py-2 px-3 bg-[#EEF5FA] hover:bg-[#DDEBF5] border border-[#BED7EA] text-[#0F3554] rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>🛡️ Quick Fill: Super Admin (Platform Governance)</span>
+              </button>
+            )}
+          </div>
         </form>
       ) : (
         /* VIEW 2: SHOP OWNER REGISTRATION (Separated: New Shop vs Claim Existing) */
@@ -462,6 +578,7 @@ export default function LoginCard() {
                     Shop Name *
                   </label>
                   <input
+                    id="reg-shop-name"
                     type="text"
                     required
                     value={regForm.name}
@@ -496,6 +613,7 @@ export default function LoginCard() {
                       City *
                     </label>
                     <input
+                      id="reg-shop-city"
                       type="text"
                       required
                       value={regForm.city}
@@ -511,6 +629,7 @@ export default function LoginCard() {
                     Shop Address (Optional)
                   </label>
                   <input
+                    id="reg-shop-address"
                     type="text"
                     value={regForm.address}
                     onChange={(e) => setRegForm({ ...regForm, address: e.target.value })}
@@ -528,6 +647,7 @@ export default function LoginCard() {
                   Owner Full Name *
                 </label>
                 <input
+                  id="reg-owner-name"
                   type="text"
                   required
                   value={regForm.ownerName}
@@ -542,6 +662,7 @@ export default function LoginCard() {
                   Owner Phone *
                 </label>
                 <input
+                  id="reg-owner-phone"
                   type="text"
                   required
                   value={regForm.ownerPhone}
@@ -557,6 +678,7 @@ export default function LoginCard() {
                 Username or Login Email *
               </label>
               <input
+                id="reg-owner-username"
                 type="text"
                 required
                 value={regForm.username}
@@ -573,6 +695,7 @@ export default function LoginCard() {
                   Password *
                 </label>
                 <input
+                  id="reg-owner-password"
                   type="password"
                   required
                   value={regForm.password}
@@ -588,6 +711,7 @@ export default function LoginCard() {
                   Confirm Password *
                 </label>
                 <input
+                  id="reg-owner-confirm-password"
                   type="password"
                   required
                   value={regForm.confirmPassword}
@@ -601,6 +725,7 @@ export default function LoginCard() {
           </div>
 
           <button
+            id="btn-reg-submit"
             type="submit"
             className="w-full h-10 sm:h-11 bg-gradient-to-r from-[#FF6A00] to-[#FF7708] hover:from-[#E85E00] hover:to-[#FF6A00] text-white font-bold text-xs sm:text-sm rounded-xl shadow-[0_4px_16px_rgba(255,106,0,0.32)] flex items-center justify-center gap-2 cursor-pointer transition-all mt-1"
           >
@@ -623,11 +748,12 @@ export default function LoginCard() {
           <p>
             New Shop Owner?{" "}
             <button
+              id="btn-toggle-register"
               type="button"
               onClick={() => {
                 setAuthMode("register");
                 setNotification(null);
-                setRegSuccess(null);
+                clearRegSuccess();
               }}
               className="text-[#FF6A00] hover:underline font-bold cursor-pointer transition-colors"
             >
@@ -638,11 +764,12 @@ export default function LoginCard() {
           <p>
             Already have a registered shop?{" "}
             <button
+              id="btn-toggle-login"
               type="button"
               onClick={() => {
                 setAuthMode("login");
                 setNotification(null);
-                setRegSuccess(null);
+                clearRegSuccess();
               }}
               className="text-[#0284C7] hover:underline font-bold cursor-pointer transition-colors"
             >

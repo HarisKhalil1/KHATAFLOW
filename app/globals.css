@@ -68,6 +68,8 @@
 
 html {
   scroll-behavior: smooth;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -77,6 +79,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Remove dark mode — KhataFlow is warm/light themed */

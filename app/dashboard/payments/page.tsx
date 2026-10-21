@@ -41,6 +41,7 @@ export default function PaymentsPage() {
         </div>
 
         <button
+          id="btn-record-payment-top"
           type="button"
           onClick={() => openModal("payment")}
           className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl shadow-md shadow-green-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"

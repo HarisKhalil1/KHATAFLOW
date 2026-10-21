@@ -118,6 +118,27 @@ export default function DigitalKhataPage() {
         )}
       </div>
 
+      {!activeCustomer && (
+        <div className="bg-white rounded-2xl p-12 text-center border border-[#EADBCA] shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-[#FFF2E5] text-kf-orange flex items-center justify-center mx-auto mb-3 font-bold text-xl">
+            📖
+          </div>
+          <h3 className="text-base font-extrabold text-kf-navy mb-1">
+            No Khata Accounts Yet
+          </h3>
+          <p className="text-xs text-[#556B82] max-w-sm mx-auto mb-4">
+            You don&apos;t have any customer ledger accounts registered yet. Add a customer to start recording credit and payments.
+          </p>
+          <button
+            type="button"
+            onClick={() => openModal("customer")}
+            className="px-5 py-2.5 bg-kf-orange hover:bg-orange-600 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            + Add New Customer
+          </button>
+        </div>
+      )}
+
       {/* Selected Customer Details Bar */}
       {activeCustomer && (
         <div className="bg-white rounded-2xl p-5 border border-[#EADBCA] shadow-xs space-y-4">

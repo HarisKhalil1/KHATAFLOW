@@ -115,115 +115,189 @@ const REGISTRY_STORAGE_KEY = "KHATAFLOW_SHOP_REGISTRY_V1";
 const ACTIVE_SHOP_STORAGE_KEY = "KHATAFLOW_ACTIVE_SHOP_ID";
 const SESSION_STORAGE_KEY = "KHATAFLOW_SESSION_V1";
 
-const DEFAULT_SHOPS: RegisteredShop[] = [
-  {
-    id: "SHOP-PK-001",
-    name: "Khyber General Store",
-    category: "General Store",
-    city: "Peshawar",
-    address: "Shop #12, Saddar Road, Peshawar Cantonment",
-    ownerName: "Haji Abdul Rehman",
-    ownerPhone: "0300-9876543",
-    status: "active",
-    createdAt: "2026-09-01T08:00:00.000Z",
-    isClaimed: true,
-    isDemoCreated: false,
-    ownerUsername: "khyber@khataflow.pk",
-    ownerPassword: "password123",
-  },
-  {
-    id: "SHOP-PK-002",
-    name: "Madina Super Store",
-    category: "Grocery / Kiryana",
-    city: "Lahore",
-    address: "Main Market, Gulberg III, Lahore",
-    ownerName: "Muhammad Usman",
-    ownerPhone: "0321-4567890",
-    status: "active",
-    createdAt: "2026-09-15T10:30:00.000Z",
-    isClaimed: true,
-    isDemoCreated: false,
-    ownerUsername: "madina@khataflow.pk",
-    ownerPassword: "password123",
-  },
-  {
-    id: "SHOP-PK-003",
-    name: "Al-Rehman Pharmacy",
-    category: "Pharmacy / Medical",
-    city: "Rawalpindi",
-    address: "Bank Road, Saddar, Rawalpindi",
-    ownerName: "Dr. Tariq Mahmood",
-    ownerPhone: "0333-1234567",
-    status: "suspended",
-    createdAt: "2026-08-20T14:15:00.000Z",
-    suspendedAt: "2026-10-18T10:00:00.000Z",
-    suspensionReason: "Annual municipal license compliance update pending review",
-    suspensionExpiresAt: "2026-11-18T10:00:00.000Z",
-    isClaimed: true,
-    isDemoCreated: false,
-    ownerUsername: "rehman.pharmacy@khataflow.pk",
-    ownerPassword: "password123",
-  },
-];
+export const HARIS_DEMO_SHOP_ID = "SHOP-PK-HARIS";
+
+export const HARIS_DEMO_SHOP: RegisteredShop = {
+  id: HARIS_DEMO_SHOP_ID,
+  name: "Haris Khan Demo Store",
+  category: "General Store",
+  city: "Peshawar",
+  address: "Demo Commercial Plaza, Saddar Road, Peshawar",
+  ownerName: "Haris Khan",
+  ownerPhone: "0300-5551234",
+  ownerUsername: "hariskhan",
+  ownerPassword: "password123",
+  status: "active",
+  createdAt: "2026-10-01T10:00:00.000Z",
+  isClaimed: true,
+  isDemoCreated: true,
+  claimCode: "CLAIM-HARIS1",
+};
+
+// Permanent demo shop is default
+const DEFAULT_SHOPS: RegisteredShop[] = [HARIS_DEMO_SHOP];
+
+// Helper to reliably identify stale demo/testing records for cleanup
+const isOldDemoShop = (s: RegisteredShop): boolean => {
+  if (!s) return false;
+  const id = (s.id || "").toUpperCase().trim();
+
+  // EXPLICIT PROTECTION: The permanent Haris Khan demo shop is protected!
+  if (id === HARIS_DEMO_SHOP_ID) {
+    return false;
+  }
+
+  const name = (s.name || "").toLowerCase().trim();
+  const owner = (s.ownerName || "").toLowerCase().trim();
+
+  // Baseline legacy demo shops
+  if (id === "SHOP-PK-001" || id === "SHOP-PK-002" || id === "SHOP-PK-003" || id.startsWith("SHOP-PK-00")) {
+    return true;
+  }
+  if (
+    name === "khyber general store" ||
+    name === "madina super store" ||
+    name === "al-rehman pharmacy" ||
+    name.includes("khyber") ||
+    name.includes("madina") ||
+    name.includes("al-rehman") ||
+    name.includes("rehman")
+  ) {
+    return true;
+  }
+
+  // Pre-cleanup manual test shops from prior sessions (except the permanent Haris Khan demo shop)
+  if (
+    /\b(rayan|ryan)\b/i.test(name) ||
+    /\b(rayan|ryan)\b/i.test(owner) ||
+    (id !== HARIS_DEMO_SHOP_ID && (name.includes("haris") || owner.includes("haris")))
+  ) {
+    return true;
+  }
+
+  return false;
+};
 
 const ShopRegistryContext = createContext<ShopRegistryContextType | undefined>(undefined);
 
 export function ShopRegistryProvider({ children }: { children: React.ReactNode }) {
   const [shops, setShops] = useState<RegisteredShop[]>(DEFAULT_SHOPS);
-  const [activeShopId, setActiveShopIdState] = useState<string>("SHOP-PK-001");
+  const [activeShopId, setActiveShopIdState] = useState<string>("");
   const [session, setSession] = useState<UserSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Restore registry & session from localStorage on client mount
+  // Restore registry & session from localStorage on client mount, safely purging old demo data
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
-        const raw = window.localStorage.getItem(REGISTRY_STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Check and enforce automatic suspension expiry
-            const now = new Date().getTime();
-            const checkedShops = parsed.map((s: RegisteredShop) => {
-              const isOriginalShop =
-                s.id === "SHOP-PK-001" || s.id === "SHOP-PK-002" || s.id === "SHOP-PK-003";
-              let updated: RegisteredShop = {
-                ...s,
-                isDemoCreated: isOriginalShop ? false : (s.isDemoCreated ?? false),
-              };
+        // 1. Clean legacy demo data keys from client storage
+        try {
+          window.localStorage.removeItem("KHATAFLOW_STORAGE_V3");
+          window.localStorage.removeItem("KHATAFLOW_STORAGE_SHOP-PK-001");
+          window.localStorage.removeItem("KHATAFLOW_STORAGE_SHOP-PK-002");
+          window.localStorage.removeItem("KHATAFLOW_STORAGE_SHOP-PK-003");
+        } catch {
+          // ignore
+        }
 
-              if (s.status === "suspended" && s.suspensionExpiresAt) {
-                const expiryTime = new Date(s.suspensionExpiresAt).getTime();
-                if (now >= expiryTime) {
-                  updated = {
-                    ...updated,
-                    status: "active" as ShopStatus,
-                    suspensionReason: undefined,
-                    suspensionExpiresAt: undefined,
-                    suspendedAt: undefined,
-                  };
+        const raw = window.localStorage.getItem(REGISTRY_STORAGE_KEY);
+        let checkedShops: RegisteredShop[] = [];
+
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const now = new Date().getTime();
+              // Clean out old demo shops
+              parsed.forEach((s: RegisteredShop) => {
+                if (isOldDemoShop(s)) {
+                  try {
+                    window.localStorage.removeItem(`KHATAFLOW_STORAGE_${s.id}`);
+                  } catch {
+                    // ignore
+                  }
                 }
-              }
-              return updated;
-            });
-            React.startTransition(() => {
-              setShops(checkedShops);
-            });
+              });
+
+              // Retain valid non-stale shops
+              const nonDemoShops = parsed.filter((s: RegisteredShop) => !isOldDemoShop(s));
+
+              // Check and enforce automatic suspension expiry for remaining shops
+              checkedShops = nonDemoShops.map((s: RegisteredShop) => {
+                let updated: RegisteredShop = { ...s };
+                if (s.status === "suspended" && s.suspensionExpiresAt) {
+                  const expiryTime = new Date(s.suspensionExpiresAt).getTime();
+                  if (now >= expiryTime) {
+                    updated = {
+                      ...updated,
+                      status: "active" as ShopStatus,
+                      suspensionReason: undefined,
+                      suspensionExpiresAt: undefined,
+                      suspendedAt: undefined,
+                    };
+                  }
+                }
+                return updated;
+              });
+            }
+          } catch (e) {
+            console.warn("Could not parse stored registry:", e);
           }
         }
 
-        // Restore authenticated session
+        // Guarantee that exactly ONE permanent Haris Khan demo store exists in the registry
+        const harisExists = checkedShops.some((s) => s.id === HARIS_DEMO_SHOP_ID);
+        if (!harisExists) {
+          checkedShops.unshift(HARIS_DEMO_SHOP);
+        } else {
+          // If already present, make sure it retains active & demo-created status
+          checkedShops = checkedShops.map((s) =>
+            s.id === HARIS_DEMO_SHOP_ID
+              ? { ...HARIS_DEMO_SHOP, ...s, status: "active", isClaimed: true, isDemoCreated: true }
+              : s
+          );
+        }
+        // Deduplicate any accidental multiple copies of any shop ID
+        const seenIds = new Set<string>();
+        checkedShops = checkedShops.filter((s) => {
+          if (seenIds.has(s.id)) return false;
+          seenIds.add(s.id);
+          return true;
+        });
+
+        // Persist cleaned registry to localStorage
+        window.localStorage.setItem(REGISTRY_STORAGE_KEY, JSON.stringify(checkedShops));
+        React.startTransition(() => {
+          setShops(checkedShops);
+        });
+
+        // 2. Restore authenticated session (Safely preserve Super Admin!)
         const rawSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
         if (rawSession) {
           try {
             const parsedSession: UserSession = JSON.parse(rawSession);
             if (parsedSession && parsedSession.username) {
-              React.startTransition(() => {
-                setSession(parsedSession);
-                if (parsedSession.role === "shop-owner" && parsedSession.shopId) {
-                  setActiveShopIdState(parsedSession.shopId);
+              // Super admin session is completely preserved
+              if (parsedSession.role === "super-admin") {
+                React.startTransition(() => {
+                  setSession(parsedSession);
+                });
+              } else if (parsedSession.role === "shop-owner") {
+                // If shop owner session belongs to a valid remaining shop, preserve it
+                const shopStillExists = checkedShops.some((s) => s.id === parsedSession.shopId);
+                if (shopStillExists) {
+                  React.startTransition(() => {
+                    setSession(parsedSession);
+                    setActiveShopIdState(parsedSession.shopId);
+                  });
+                } else {
+                  // Session belonged to a cleaned demo shop, remove it
+                  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+                  React.startTransition(() => {
+                    setSession(null);
+                  });
                 }
-              });
+              }
             }
           } catch (e) {
             console.warn("Failed to parse stored session:", e);
@@ -234,11 +308,22 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
           });
         }
 
+        // 3. Restore or sanitize active shop ID
         const savedActive = window.localStorage.getItem(ACTIVE_SHOP_STORAGE_KEY);
-        if (savedActive && !rawSession) {
-          React.startTransition(() => {
-            setActiveShopIdState(savedActive);
-          });
+        const isValidSavedActive = Boolean(
+          savedActive && checkedShops.some((s) => s.id === savedActive)
+        );
+        const initialActiveId = isValidSavedActive
+          ? (savedActive as string)
+          : (checkedShops[0]?.id || "");
+
+        React.startTransition(() => {
+          setActiveShopIdState(initialActiveId);
+        });
+        if (initialActiveId) {
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, initialActiveId);
+        } else {
+          window.localStorage.removeItem(ACTIVE_SHOP_STORAGE_KEY);
         }
       }
     } catch (err) {
@@ -256,7 +341,11 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
     try {
       if (typeof window !== "undefined") {
         window.localStorage.setItem(REGISTRY_STORAGE_KEY, JSON.stringify(shops));
-        window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, activeShopId);
+        if (activeShopId) {
+          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, activeShopId);
+        } else {
+          window.localStorage.removeItem(ACTIVE_SHOP_STORAGE_KEY);
+        }
       }
     } catch (err) {
       console.warn("Could not save shop registry to storage:", err);
@@ -311,16 +400,16 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
 
   // Active shop object
   const activeShop = useMemo(() => {
-    return shops.find((s) => s.id === activeShopId) || shops[0];
+    return shops.find((s) => s.id === activeShopId) || shops[0] || undefined;
   }, [shops, activeShopId]);
 
   // System statistics derived strictly from real registry records
   const [systemStats, setSystemStats] = useState<SystemStats>({
-    totalShops: DEFAULT_SHOPS.length,
-    activeShops: DEFAULT_SHOPS.filter((s) => s.status === "active").length,
-    suspendedShops: DEFAULT_SHOPS.filter((s) => s.status === "suspended").length,
-    pendingVerificationShops: DEFAULT_SHOPS.filter((s) => s.status === "pending-verification").length,
-    recentlyCreatedCount: DEFAULT_SHOPS.length,
+    totalShops: 0,
+    activeShops: 0,
+    suspendedShops: 0,
+    pendingVerificationShops: 0,
+    recentlyCreatedCount: 0,
   });
 
   useEffect(() => {
@@ -350,25 +439,39 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
 
   // Helper to generate guaranteed collision-resistant Shop ID
   const generateUniqueShopId = useCallback(() => {
-    const existingIds = new Set(shops.map((s) => s.id));
-    let nextNum = shops.length + 1;
-    let candidate = `SHOP-PK-${nextNum.toString().padStart(3, "0")}`;
-    while (existingIds.has(candidate)) {
+    const existingIds = new Set(shops.map((s) => s.id.toUpperCase()));
+    let maxNum = 1000;
+    shops.forEach((s) => {
+      const match = s.id.match(/SHOP-PK-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    let nextNum = maxNum + 1;
+    let candidate = `SHOP-PK-${nextNum}`;
+    while (existingIds.has(candidate.toUpperCase())) {
       nextNum += 1;
-      candidate = `SHOP-PK-${nextNum.toString().padStart(3, "0")}`;
+      candidate = `SHOP-PK-${nextNum}`;
     }
     return candidate;
   }, [shops]);
 
-  // Helper to generate a secure random claim/invitation code
+  // Helper to generate a secure random claim/invitation code with collision check
   const generateClaimCode = useCallback(() => {
+    const existingCodes = new Set(
+      shops.map((s) => s.claimCode).filter((c): c is string => Boolean(c))
+    );
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let code = "CLAIM-";
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    let code = "";
+    do {
+      code = "CLAIM-";
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+    } while (existingCodes.has(code));
     return code;
-  }, []);
+  }, [shops]);
 
   // 1. Owner Login
   const login = useCallback(
@@ -418,13 +521,30 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
         };
       }
 
-      // Shop Owner login - matches registered username or phone
+      // Shop Owner login - matches registered username, email, phone, or name
       const matchedShop = shops.find((s) => {
+        const isHaris = s.id === HARIS_DEMO_SHOP_ID;
         const matchUsername = s.ownerUsername && s.ownerUsername.toLowerCase() === cleanUser;
         const matchPhone = s.ownerPhone && s.ownerPhone.replace(/\D/g, "") === cleanUser.replace(/\D/g, "");
-        // Demo fallback: also allow "shopowner@khataflow.pk" for default shop SHOP-PK-001
-        const isDemoKhyber = s.id === "SHOP-PK-001" && cleanUser === "shopowner@khataflow.pk";
-        if (!matchUsername && !matchPhone && !isDemoKhyber) return false;
+        const matchName = s.ownerName && s.ownerName.toLowerCase() === cleanUser;
+        const isHarisUserMatch =
+          isHaris &&
+          (cleanUser === "haris@khataflow.pk" ||
+            cleanUser === "hariskhan@khataflow.pk" ||
+            cleanUser === "hariskhan" ||
+            cleanUser === "haris" ||
+            cleanUser === "haris khan");
+
+        if (!matchUsername && !matchPhone && !matchName && !isHarisUserMatch) return false;
+
+        if (isHaris) {
+          return (
+            cleanPass === "haris123" ||
+            cleanPass === "password123" ||
+            cleanPass === "demo123" ||
+            cleanPass === (s.ownerPassword || "")
+          );
+        }
 
         const expectedPass = s.ownerPassword || "password123";
         return cleanPass === expectedPass;
@@ -443,6 +563,25 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
           success: false,
           error: `Shop "${matchedShop.name}" (${matchedShop.id}) has not been claimed yet. Please select "Register Shop" and enter your admin claim code to activate your account.`,
         };
+      }
+
+      // Check if shop registration is pending Super Admin approval
+      if (matchedShop.status === "pending-verification") {
+        return {
+          success: false,
+          error: `Shop "${matchedShop.name}" registration is pending approval by Super Admin. You will receive access once approved.`,
+        };
+      }
+
+      // Check if shop is suspended
+      if (matchedShop.status === "suspended") {
+        const suspension = isShopSuspended(matchedShop.id);
+        if (suspension.isSuspended) {
+          return {
+            success: false,
+            error: `Shop "${matchedShop.name}" is currently suspended. Reason: ${suspension.reason || "Administrative hold"}.`,
+          };
+        }
       }
 
       const ownerSession: UserSession = {
@@ -621,37 +760,17 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
         ownerPhone: trimmedPhone,
         ownerUsername: trimmedUsername,
         ownerPassword: trimmedPassword,
-        status: "active",
+        status: "pending-verification",
         createdAt: new Date().toISOString(),
         isClaimed: true,
       };
 
       setShops((prev) => [newShop, ...prev]);
-      setActiveShopIdState(newId);
-
-      const newSession: UserSession = {
-        username: trimmedUsername,
-        role: "shop-owner",
-        shopId: newId,
-        shopName: newShop.name,
-        authenticatedAt: new Date().toISOString(),
-      };
-      setSession(newSession);
-
-      if (typeof window !== "undefined") {
-        try {
-          window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSession));
-          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, newId);
-        } catch (e) {
-          console.warn("Storage error:", e);
-        }
-      }
 
       return {
         success: true,
         shop: newShop,
-        session: newSession,
-        message: `Shop registered successfully! Assigned unique ID: ${newId}. Welcome to KhataFlow.`,
+        message: `Shop registered successfully! Assigned unique ID: ${newId}. Registration is pending Super Admin approval before you can access the dashboard.`,
       };
     },
     [shops, generateUniqueShopId]
@@ -833,15 +952,15 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
   // 8. Eligibility checker for manual demo shop deletion
   const isShopEligibleForDemoDelete = useCallback(
     (shopId: string) => {
-      if (shopId === "SHOP-PK-001" || shopId === "SHOP-PK-002" || shopId === "SHOP-PK-003") {
-        return {
-          eligible: false,
-          reason: "Protected: Baseline system shop cannot be deleted.",
-        };
-      }
       const shop = shops.find((s) => s.id === shopId);
       if (!shop) {
         return { eligible: false, reason: "Shop not found in registry." };
+      }
+      if (shop.id === HARIS_DEMO_SHOP_ID) {
+        return {
+          eligible: false,
+          reason: "Protected: Haris Khan Demo Store is the permanent testing account and cannot be deleted.",
+        };
       }
       if (shop.isClaimed) {
         return {
@@ -860,7 +979,7 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
     [shops]
   );
 
-  // 9. Manual Delete Demo Shop (preserves original shops, customer records, and ledger history)
+  // 9. Manual Delete Demo Shop (removes selected eligible shop and its isolated data)
   const deleteDemoShop = useCallback(
     (shopId: string) => {
       const eligibility = isShopEligibleForDemoDelete(shopId);
@@ -872,7 +991,8 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
       }
 
       // Remove shop from registry
-      setShops((prev) => prev.filter((s) => s.id !== shopId));
+      const remainingShops = shops.filter((s) => s.id !== shopId);
+      setShops(remainingShops);
 
       // Remove associated scoped demo records where safe
       if (typeof window !== "undefined") {
@@ -883,17 +1003,22 @@ export function ShopRegistryProvider({ children }: { children: React.ReactNode }
         }
       }
 
-      // If active shop was the deleted shop, reset to default shop
+      // If active shop was the deleted shop, reset to remaining or empty
       if (activeShopId === shopId) {
-        setActiveShopIdState("SHOP-PK-001");
+        const nextActive = remainingShops[0]?.id || "";
+        setActiveShopIdState(nextActive);
         if (typeof window !== "undefined") {
-          window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, "SHOP-PK-001");
+          if (nextActive) {
+            window.localStorage.setItem(ACTIVE_SHOP_STORAGE_KEY, nextActive);
+          } else {
+            window.localStorage.removeItem(ACTIVE_SHOP_STORAGE_KEY);
+          }
         }
       }
 
       return { success: true };
     },
-    [isShopEligibleForDemoDelete, activeShopId]
+    [isShopEligibleForDemoDelete, activeShopId, shops]
   );
 
   const value = useMemo(

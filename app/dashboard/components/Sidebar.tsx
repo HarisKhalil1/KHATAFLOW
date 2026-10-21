@@ -117,6 +117,26 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
           ),
         },
         {
+          name: lang === "ur" ? "سامان اور ریٹ" : "Items & Rates",
+          href: "/dashboard/items",
+          icon: (active) => (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={active ? "#FF6A00" : "currentColor"}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+              <path d="m3.3 7 8.7 5 8.7-5" />
+              <path d="M12 22V12" />
+            </svg>
+          ),
+        },
+        {
           name: t.dashboard.menu.expenses,
           href: "/dashboard/expenses",
           icon: (active) => (
@@ -279,17 +299,24 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
       <div className="p-3.5 border-t border-[#1A3F61]/70 bg-[#0B1E2E] flex-shrink-0">
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#163B5C] flex items-center justify-center text-[#FF8C33] text-xs font-bold flex-shrink-0">
-            {(activeShop?.name || "KG").slice(0, 2).toUpperCase()}
+            {(activeShop?.name || "KF").slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-white truncate" title={activeShop?.name}>
-              {activeShop?.name || "Khyber General Store"}
+            <div className="text-xs font-bold text-white truncate flex items-center gap-1.5" title={activeShop?.name}>
+              <span className="truncate">{activeShop?.name || "KhataFlow Shop"}</span>
+              {(activeShop?.isDemoCreated || activeShop?.id === "SHOP-PK-HARIS") && (
+                <span className="px-1 py-0.2 bg-[#FF6A00]/20 text-[#FF9D4D] border border-[#FF6A00]/30 rounded text-[8px] font-extrabold flex-shrink-0">
+                  DEMO
+                </span>
+              )}
             </div>
             <div className="text-[10px] text-[#8DA6BC] flex items-center gap-1.5 truncate">
-              <span className="font-mono text-[9px] text-[#FF9D4D] bg-[#142F46] px-1.5 py-0.5 rounded font-bold">
-                {activeShop?.id || "SHOP-PK-001"}
-              </span>
-              <span className="truncate">{activeShop?.city || "Peshawar"}</span>
+              {activeShop?.id ? (
+                <span className="font-mono text-[9px] text-[#FF9D4D] bg-[#142F46] px-1.5 py-0.5 rounded font-bold">
+                  {activeShop.id}
+                </span>
+              ) : null}
+              <span className="truncate">{activeShop?.city || "Pakistan"}</span>
             </div>
           </div>
         </div>

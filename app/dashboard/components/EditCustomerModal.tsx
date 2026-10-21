@@ -30,10 +30,12 @@ export default function EditCustomerModal() {
       return;
     }
 
-    const cleanedPhone = trimmedPhone.replace(/[\s-]/g, "");
-    if (!/^((\+92)|(0092)|(0))?3[0-9]{9}$/.test(cleanedPhone)) {
-      setError("Please enter a valid Pakistani mobile number (e.g., 0300-1234567 or 03219876543).");
-      return;
+    if (trimmedPhone) {
+      const digitsOnly = trimmedPhone.replace(/\D/g, "");
+      if (digitsOnly.length > 0 && digitsOnly.length < 5) {
+        setError("Please enter a valid phone number (at least 5 digits) or leave blank.");
+        return;
+      }
     }
 
     setIsSubmitting(true);

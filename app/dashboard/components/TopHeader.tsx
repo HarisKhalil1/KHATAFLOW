@@ -41,8 +41,8 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Periodic udhaar balance, cashflow summaries, and expense analytics",
   },
   "/dashboard/settings": {
-    title: "Settings & Demo Controls",
-    subtitle: "Manage shop preferences and reset in-memory demo data",
+    title: "Settings & Shop Preferences",
+    subtitle: "Manage shop profile and local storage options",
   },
 };
 
@@ -76,8 +76,8 @@ const PAGE_TITLES_UR: Record<string, { title: string; subtitle: string }> = {
     subtitle: "ادھار، نقد کیش فلو اور منافع کے تفصیلی جائزے",
   },
   "/dashboard/settings": {
-    title: "سیٹنگز اور ڈیمو کنٹرولز",
-    subtitle: "دکان کی معلومات اور ڈیٹا محفوظ کرنے کی سیٹنگز",
+    title: "سیٹنگز اور ترتیبات",
+    subtitle: "دکان کی معلومات اور محفوظ شدہ ڈیٹا کا انتظام",
   },
 };
 
@@ -167,6 +167,7 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
         {/* Quick Action Dropdown (hidden on small mobile to prevent header overflow) */}
         <div className="relative hidden sm:block" ref={quickRef}>
           <button
+            id="btn-quick-new-entry"
             type="button"
             onClick={() => setQuickMenuOpen((prev) => !prev)}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#FFF4EB] hover:bg-[#FFE8D6] text-kf-orange text-xs font-bold rounded-xl border border-[#FFD9B3] transition-colors cursor-pointer shadow-2xs"
@@ -187,6 +188,7 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
                 Quick Create
               </div>
               <button
+                id="quick-entry-record-payment"
                 type="button"
                 onClick={() => {
                   setQuickMenuOpen(false);
@@ -203,6 +205,7 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
                 </div>
               </button>
               <button
+                id="quick-entry-give-credit"
                 type="button"
                 onClick={() => {
                   setQuickMenuOpen(false);
@@ -219,6 +222,7 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
                 </div>
               </button>
               <button
+                id="quick-entry-add-customer"
                 type="button"
                 onClick={() => {
                   setQuickMenuOpen(false);
@@ -321,11 +325,16 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
             className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[#F5ECE1] transition-colors cursor-pointer"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0F283E] to-[#1E4B72] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              {(activeShop?.ownerName || "Haji Abdul Rehman").slice(0, 2).toUpperCase()}
+              {(activeShop?.ownerName || "SO").slice(0, 2).toUpperCase()}
             </div>
             <div className="hidden sm:block text-left text-xs">
-              <div className="font-extrabold text-kf-navy leading-none">
-                {activeShop?.ownerName || "Haji Abdul Rehman"}
+              <div className="font-extrabold text-kf-navy leading-none flex items-center gap-1.5">
+                <span>{activeShop?.ownerName || "Shop Owner"}</span>
+                {(activeShop?.isDemoCreated || activeShop?.id === "SHOP-PK-HARIS") && (
+                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded text-[9px] font-extrabold">
+                    DEMO
+                  </span>
+                )}
               </div>
               <div className="text-[10px] text-[#556B82] leading-none mt-1">Shop Owner</div>
             </div>
@@ -337,14 +346,19 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
           {profileOpen && (
             <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#EADBCA] p-2 z-50">
               <div className="p-3 border-b border-[#F0E4D4] bg-[#FCF7F0] rounded-xl mb-1">
-                <div className="font-extrabold text-xs text-kf-navy">
-                  {activeShop?.ownerName || "Haji Abdul Rehman"}
+                <div className="font-extrabold text-xs text-kf-navy flex items-center justify-between">
+                  <span>{activeShop?.ownerName || "Shop Owner"}</span>
+                  {(activeShop?.isDemoCreated || activeShop?.id === "SHOP-PK-HARIS") && (
+                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded text-[9px] font-extrabold">
+                      DEMO ACCOUNT
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] text-[#556B82]">
-                  {activeShop?.name || "Khyber General Store"}
+                  {activeShop?.name || "KhataFlow Shop"}
                 </div>
                 <div className="text-[10px] text-kf-orange font-semibold mt-1">
-                  {activeShop?.city || "Peshawar"} • {activeShop?.id || "SHOP-PK-001"}
+                  {activeShop?.city || "Pakistan"}{activeShop?.id ? ` • ${activeShop.id}` : ""}
                 </div>
               </div>
 
@@ -371,7 +385,9 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
               <button
                 type="button"
                 onClick={() => {
-                  resetDemoData();
+                  if (window.confirm("Clear local business records for this shop?")) {
+                    resetDemoData();
+                  }
                   setProfileOpen(false);
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-kf-navy hover:bg-[#FCF4EB] hover:text-kf-orange transition-colors cursor-pointer text-left"
@@ -380,7 +396,7 @@ export default function TopHeader({ onOpenMobile }: TopHeaderProps) {
                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
                 </svg>
-                <span>Reset Demo Data</span>
+                <span>Clear Shop Records</span>
               </button>
 
               <div className="border-t border-[#F0E4D4] my-1" />
