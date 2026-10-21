@@ -69,7 +69,7 @@
 html {
   scroll-behavior: smooth;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -80,7 +80,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Remove dark mode — KhataFlow is warm/light themed */

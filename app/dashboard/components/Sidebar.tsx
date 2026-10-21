@@ -19,7 +19,12 @@ interface NavSection {
   items: NavItem[];
 }
 
-export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
+interface SidebarProps {
+  onCloseMobile?: () => void;
+  className?: string;
+}
+
+export default function Sidebar({ onCloseMobile, className }: SidebarProps) {
   const pathname = usePathname();
   const { openModal } = useDashboard();
   const { lang, t } = useLanguage();
@@ -202,7 +207,9 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
   ];
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-[#0F283E] text-white flex flex-col h-screen sticky top-0 border-r border-[#163B5C] select-none z-30">
+    <aside
+      className={`w-64 flex-shrink-0 bg-[#0F283E] text-white flex flex-col h-full border-r border-[#163B5C] select-none ${className || ""}`}
+    >
       {/* Brand Header */}
       <div className="h-20 flex items-center px-5 border-b border-[#1A3F61]/80 justify-between flex-shrink-0">
         <Link
@@ -255,8 +262,11 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
         </button>
       </div>
 
-      {/* Main Navigation Links */}
-      <nav className="flex-1 px-3 py-3.5 space-y-4 overflow-y-auto" aria-label="Dashboard sidebar navigation">
+      {/* Main Navigation Links with Independent Scroll */}
+      <nav
+        className="flex-1 min-h-0 px-3 py-3.5 space-y-4 overflow-y-auto overscroll-contain"
+        aria-label="Dashboard sidebar navigation"
+      >
         {navSections.map((section) => (
           <div key={section.title} className="space-y-1">
             <div className="px-3 pb-1 text-[10px] font-bold tracking-wider uppercase text-[#6B8BA6]">
@@ -296,7 +306,7 @@ export default function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void 
       </nav>
 
       {/* Authenticated Shop Badge & Sign Out */}
-      <div className="p-3.5 border-t border-[#1A3F61]/70 bg-[#0B1E2E] flex-shrink-0">
+      <div className="p-3.5 border-t border-[#1A3F61]/70 bg-[#0B1E2E] flex-shrink-0 mt-auto">
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#163B5C] flex items-center justify-center text-[#FF8C33] text-xs font-bold flex-shrink-0">
             {(activeShop?.name || "KF").slice(0, 2).toUpperCase()}

@@ -103,8 +103,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#FAF3E8] flex text-kf-navy antialiased selection:bg-[#FFE0CC]">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
+      {/* Desktop Sidebar - Fixed full viewport height with independent scroll */}
+      <div className="hidden lg:flex lg:flex-col shrink-0 sticky top-0 h-screen h-[100dvh] z-30">
         <Sidebar />
       </div>
 
@@ -112,7 +112,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         <TopHeader onOpenMobile={() => setMobileNavOpen(true)} />
         <DemoNoticeBanner />
 

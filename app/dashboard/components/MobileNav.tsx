@@ -45,7 +45,7 @@ export default function MobileNav({ isOpen, onClose }: MobileNavProps) {
       />
 
       {/* Drawer */}
-      <div className="relative z-10 w-72 max-w-[85vw] flex flex-col bg-[#0F283E] shadow-2xl animate-in slide-in-from-left duration-200">
+      <div className="relative z-10 w-72 max-w-[85vw] h-full h-[100dvh] flex flex-col bg-[#0F283E] shadow-2xl animate-in slide-in-from-left duration-200">
         <div className="absolute top-4 right-4 z-20">
           <button
             type="button"
@@ -59,7 +59,7 @@ export default function MobileNav({ isOpen, onClose }: MobileNavProps) {
             </svg>
           </button>
         </div>
-        <Sidebar onCloseMobile={onClose} />
+        <Sidebar onCloseMobile={onClose} className="w-full border-r-0" />
       </div>
     </div>
   );

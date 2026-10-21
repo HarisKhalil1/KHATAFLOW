@@ -10,7 +10,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
   return (
     <LanguageProvider>
-      <div className="min-h-screen bg-[#FAF3E8] flex flex-col text-kf-navy antialiased selection:bg-[#FFE0CC] overflow-x-hidden max-w-full">
+      <div className="min-h-screen bg-[#FAF3E8] flex flex-col text-kf-navy antialiased selection:bg-[#FFE0CC] overflow-x-clip max-w-full">
         {/* Top Super Admin Platform Navigation Header */}
         <header className="h-16 sm:h-20 bg-[#0F283E] text-white border-b border-[#1A3D5D] sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-3 sm:gap-4">
